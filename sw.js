@@ -1,8 +1,8 @@
 // 野草分布図 オフライン用キャッシュ
 // アプリを更新したら VERSION の数字を変えてください
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'yasou-' + VERSION;
-const FILES = ['./', 'index.html', 'base.png', 'manifest.json', 'icon-180.png', 'icon-512.png'];
+const FILES = ['./', 'index.html', 'base.png', 'manifest.json', 'icon-180.png', 'icon-512.png', 'seed.json'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });

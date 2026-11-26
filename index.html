@@ -107,7 +107,7 @@ table.list tr.cur td{background:var(--moss-soft)}
 table.list tr[data-i]{cursor:pointer}
 .dot{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:8px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
 .up{color:var(--moss)} .down{color:var(--warn)}
-.sprow{display:grid;grid-template-columns:2.4em 1fr 52px;gap:8px;align-items:center;margin:6px 0}
+.sprow{display:grid;grid-template-columns:2.4em 1fr;gap:8px;align-items:center;margin:6px 0}
 .sprow input[type=text]{height:40px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-size:15px;background:var(--surface)}
 .sprow input[type=color]{width:52px;height:40px;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -176,7 +176,9 @@ table.list tr[data-i]{cursor:pointer}
   <header><h2>出力</h2><button class="btn" data-close>閉じる</button></header>
   <div class="body">
     <h3>画像</h3>
-    <label class="switch"><span>前年の分布を斜線で重ねる</span><input type="checkbox" id="expPrev" checked></label>
+    <p class="note">過去の図面と同じ体裁（右下に凡例、A4・1/225相当）で出力します。</p>
+    <label class="switch"><span>前年の分布を斜線で重ねる</span><input type="checkbox" id="expPrev"></label>
+    <label class="switch"><span>凡例に面積を書く</span><input type="checkbox" id="expArea"></label>
     <div class="row"><button class="btn primary wide" id="expOne">表示中の種を画像で保存</button></div>
     <div class="row"><button class="btn wide" id="expAll">全種の画像をまとめて保存（ZIP）</button></div>
     <div class="progress" id="expProg"><i></i></div>
@@ -190,6 +192,7 @@ table.list tr[data-i]{cursor:pointer}
   <header><h2>設定</h2><button class="btn" data-close>閉じる</button></header>
   <div class="body">
     <h3>年度</h3>
+    <p class="note">色見本をタップすると、その年度の分布の色を変えられます（2024年は赤、2025年はオレンジが過去図面の色です）。</p>
     <div class="chips" id="yearChips"></div>
     <div class="row"><button class="btn" id="addYear">次の年度を追加</button></div>
 
@@ -219,6 +222,7 @@ table.list tr[data-i]{cursor:pointer}
     <h3>データ</h3>
     <p class="note">データはこのiPadの中に保存されます。機種変更や万一に備えて、定期的にバックアップを保存してください。</p>
     <div class="row"><button class="btn" id="backupSave">バックアップを保存</button><label class="btn" style="display:inline-flex;align-items:center">バックアップを読み込む<input type="file" id="backupLoad" accept=".json,application/json" hidden></label></div>
+    <div class="row"><button class="btn" id="reseed">2024・2025年の初期データを読み込み直す</button></div>
     <div class="row"><button class="btn warn" id="clearLayer">表示中の種・年度の分布を全部消す</button></div>
   </div>
 </section>
@@ -230,7 +234,13 @@ table.list tr[data-i]{cursor:pointer}
     <div class="row"><label class="btn primary" style="display:inline-flex;align-items:center">DXFファイルを選ぶ<input type="file" id="dxfFile" accept=".dxf" hidden></label><span id="dxfName" class="note"></span></div>
     <p class="note" id="dxfSummary"></p>
     <div id="dxfStep2" class="hidden">
-      <h3>2. 位置合わせ</h3>
+      <h3>2. 取り込み方</h3>
+      <label class="switch"><span>ハッチ（塗りつぶし）だけを取り込む</span><input type="checkbox" id="dxfHatchOnly" checked></label>
+      <label class="switch"><span>右下の凡例部分は取り込まない</span><input type="checkbox" id="dxfSkipLegend" checked></label>
+      <div class="row"><label class="field"><span>レイヤ名に年が無いときの年度</span><select id="dxfNoYear"></select></label></div>
+      <h3>3. 位置合わせ</h3>
+      <div class="row"><label class="field"><span>方法</span><select id="dxfAlign"><option value="auto">この図面の座標で自動（250702樹木位置・250508野草分布と同じ座標）</option><option value="manual">2点を指定して合わせる</option></select></label></div>
+      <div id="dxfManual" class="hidden">
       <p class="note">AutoCADのIDコマンドで通り芯の交点など、図面上で分かる点の座標を調べて入力し、「図面上で指定」でその点をタップしてください。2点入れると縮尺・回転も合わせます（1点だけなら現在の縮尺を使います）。</p>
       <div class="row"><div class="field"><span>CADの単位</span><select id="dxfUnit"><option value="0.001">mm</option><option value="1">m</option></select></div></div>
       <div class="pt" id="ptA"><b>基準点A</b>
@@ -239,11 +249,12 @@ table.list tr[data-i]{cursor:pointer}
       <div class="pt" id="ptB"><b>基準点B（任意）</b>
         <div class="row"><label class="field"><span>X</span><input type="number" inputmode="decimal" data-k="X"></label><label class="field"><span>Y</span><input type="number" inputmode="decimal" data-k="Y"></label></div>
         <div class="row"><button class="btn" data-pick>図面上で指定</button><span class="note" data-st>未指定</span></div></div>
-      <h3>3. レイヤと種・年度の対応</h3>
+      </div>
+      <h3>4. レイヤと種・年度の対応</h3>
       <p class="note">レイヤ名に種名や年度（2024など）が入っていれば自動で選ばれます。取り込まないレイヤはチェックを外してください。</p>
       <div class="row"><button class="btn" id="namesFromLayers">レイヤ名から種名を登録</button></div>
       <div style="overflow-x:auto"><table class="list layertbl" id="layerTbl"></table></div>
-      <h3>4. 取り込む</h3>
+      <h3>5. 取り込む</h3>
       <label class="switch"><span>すでに描いてある分布を置き換える（オフ：追加）</span><input type="checkbox" id="dxfReplace" checked></label>
       <div class="row"><button class="btn" id="dxfPreview">位置を図面で確認</button><button class="btn primary" id="dxfImport">取り込む</button></div>
     </div>
@@ -255,7 +266,9 @@ table.list tr[data-i]{cursor:pointer}
 <script>
 'use strict';
 /* ============ 定数・ユーティリティ ============ */
-const DEFAULT_MPP = 6 / 262.5;           // 1px あたりのm（通り芯6000mm = 262.5px, 1/225）
+const DEFAULT_MPP = 0.02286;              // 1px あたりのm（A4・1/225 を 250dpi で画像化）
+const YEAR_COLORS = {2023:'#FF0000',2024:'#FF0000',2025:'#FFBF00',2026:'#BF00FF',2027:'#0080FF',2028:'#00A060',2029:'#FF4080',2030:'#8000FF'};
+const LEG = {x:1810, y:1544, line:36, font:25, swatch:[1745.7,1641.3,1770.7,1649.0,1793.5,1647.0,1799.8,1628.9,1781.4,1615.6,1751.4,1616.9,1744.3,1625.3]};
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const pad2 = n => String(n).padStart(2, '0');
@@ -263,7 +276,7 @@ const fmtA = a => (a || 0).toFixed(2);
 function hslHex(h, s, l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
   const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
   return '#'+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''); }
-const autoColor = i => hslHex((i*137.508+20)%360, 68, i%3===0?40:(i%3===1?48:34));
+const autoColor = i => hslHex((i*137.508+20)%360, 90, 50);
 function toast(msg, ms=2600){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'), ms); }
 function newCanvas(w,h){ const c=document.createElement('canvas'); c.width=Math.max(1,Math.ceil(w)); c.height=Math.max(1,Math.ceil(h)); return c; }
 
@@ -279,15 +292,21 @@ const DB = { db:null,
 /* ============ プロジェクトデータ ============ */
 function defaultProject(){
   return { app:'yasou-bunpu', v:1, years:[2024,2025,2026], year:2026,
-    species:Array.from({length:50},(_,i)=>({id:'sp'+(i+1), name:'野草'+pad2(i+1), color:autoColor(i)})),
-    sp:0, mpp:DEFAULT_MPP, layers:{},
-    set:{fingerDraw:false, showPrev:true, fade:0.35, alpha:0.55, brushM:1.0, tool:'lasso', expPrev:true} };
+    species:Array.from({length:50},(_,i)=>({id:'sp'+(i+1), name:'野草'+pad2(i+1)})),
+    sp:0, mpp:DEFAULT_MPP, layers:{}, labels:{}, yearColors:{},
+    set:{fingerDraw:false, showPrev:true, fade:0, alpha:0.5, brushM:1.0, tool:'lasso', expPrev:false, expArea:false} };
 }
 let P = null;
 const keyOf = (y, spIdx) => y + '|' + P.species[spIdx].id;
 const curKey = () => keyOf(P.year, P.sp);
 function prevYear(){ const ys=[...P.years].sort((a,b)=>a-b); const i=ys.indexOf(P.year); return i>0?ys[i-1]:null; }
 const shapesOf = k => P.layers[k] || [];
+function yearColor(y){ if(y==null) return '#888'; P.yearColors=P.yearColors||{}; return P.yearColors[y] || YEAR_COLORS[y] || autoColor(y); }
+function yearLabel(y, spIdx){ const k=keyOf(y,spIdx); const l=(P.labels||{})[k]; return l==null ? `${y}年` : l; }
+async function seedProject(){
+  const r=await fetch('seed.json'); if(!r.ok) throw new Error('seed'); const sd=await r.json();
+  const p=defaultProject(); p.species=sd.species; p.layers=sd.layers; p.labels=sd.labels||{}; p.seeded=true; return p;
+}
 let saveTimer=null;
 function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>DB.set('project', P).catch(e=>toast('保存に失敗しました: '+e.message)), 500); }
 
@@ -398,7 +417,7 @@ function draw(){
     c.beginPath(); c.moveTo(m.x-s,m.y); c.lineTo(m.x+s,m.y); c.moveTo(m.x,m.y-s); c.lineTo(m.x,m.y+s); c.stroke();
     c.fillStyle='#E0262B'; c.font=`bold ${14/Z}px sans-serif`; c.fillText(m.label, m.x+s*0.6, m.y-s*0.6); }
 }
-function curColor(){ return P.species[P.sp].color; }
+function curColor(){ return yearColor(P.year); }
 function drawLive(c){
   const d=drawing, p=d.pts; if(p.length<2) return;
   const col=curColor();
@@ -414,7 +433,7 @@ function drawLive(c){
 }
 function rebuild(which='both'){
   if(which!=='prev'){ curL = buildLayer(shapesOf(curKey()), 'fill', curColor(), P.set.alpha); }
-  if(which!=='cur'){ const py=prevYear(); prevL = py!=null ? buildLayer(shapesOf(keyOf(py,P.sp)), 'hatch', PREV_COLOR) : null; }
+  if(which!=='cur'){ const py=prevYear(); prevL = py!=null ? buildLayer(shapesOf(keyOf(py,P.sp)), 'hatch', yearColor(py)) : null; }
   requestDraw();
 }
 const brushPx = () => P.set.brushM / P.mpp;
@@ -535,7 +554,7 @@ function redo(){ const k=curKey(), h=H_(k); if(!h.r.length) return; h.u.push(sha
 /* ============ 画面上部・ツール ============ */
 function updateTop(){
   const s=P.species[P.sp];
-  $('#spSw').style.background=s.color; $('#spNo').textContent='No.'+pad2(P.sp+1); $('#spName').textContent=s.name;
+  $('#spSw').style.background=curColor(); $('#spNo').textContent='No.'+pad2(P.sp+1); $('#spName').textContent=s.name;
   const a=areaOf(P.year,P.sp); $('#areaCur').textContent=fmtA(a)+' m²';
   const py=prevYear(); if(py!=null){ const b=areaOf(py,P.sp), d=a-b;
     $('#areaPrev').textContent=`${py}年 ${fmtA(b)} m²（${d>=0?'+':''}${fmtA(d)}）`; } else $('#areaPrev').textContent='';
@@ -572,7 +591,7 @@ function renderList(){
   let tc=0,tp=0;
   P.species.forEach((s,i)=>{ const a=areaOf(P.year,i); tc+=a; let ex='';
     if(py!=null){ const b=areaOf(py,i); tp+=b; const d=a-b; ex=`<td>${fmtA(b)}</td><td class="${d>0.005?'up':d<-0.005?'down':''}">${d>=0?'+':''}${fmtA(d)}</td>`; }
-    h+=`<tr data-i="${i}" class="${i===P.sp?'cur':''}"><td>${pad2(i+1)}</td><td><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</td><td>${fmtA(a)}</td>${ex}</tr>`; });
+    h+=`<tr data-i="${i}" class="${i===P.sp?'cur':''}"><td>${pad2(i+1)}</td><td>${esc(s.name)}</td><td>${fmtA(a)}</td>${ex}</tr>`; });
   h+=`<tr><td></td><td><b>合計</b></td><td><b>${fmtA(tc)}</b></td>${py!=null?`<td><b>${fmtA(tp)}</b></td><td></td>`:''}</tr>`;
   const t=$('#listTbl'); t.innerHTML=h;
   t.querySelectorAll('tr[data-i]').forEach(r=>r.onclick=()=>{ setSp(+r.dataset.i); closeSheet(); });
@@ -582,11 +601,12 @@ const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&
 /* ============ 設定 ============ */
 function renderSettings(){
   const ch=$('#yearChips'); ch.innerHTML='';
-  [...P.years].sort((a,b)=>a-b).forEach(y=>{ const d=document.createElement('span'); d.className='chip'; d.innerHTML=`${y}年 <button aria-label="${y}年を削除">×</button>`;
+  [...P.years].sort((a,b)=>a-b).forEach(y=>{ const d=document.createElement('span'); d.className='chip'; d.innerHTML=`<input type="color" value="${yearColor(y)}" aria-label="${y}年の色" style="width:34px;height:30px;border:0;padding:0;background:none">${y}年 <button aria-label="${y}年を削除">×</button>`;
+    d.querySelector('input').oninput=e=>{ P.yearColors=P.yearColors||{}; P.yearColors[y]=e.target.value; save(); rebuild(); updateTop(); };
     d.querySelector('button').onclick=()=>{ if(P.years.length<=1) return toast('年度は1つ以上必要です');
       if(!confirm(`${y}年と、その年の分布データをすべて削除します。よろしいですか？`)) return;
       P.years=P.years.filter(v=>v!==y); for(const k of Object.keys(P.layers)) if(k.startsWith(y+'|')) delete P.layers[k];
-      if(P.year===y) P.year=Math.max(...P.years); save(); fillYearSel(); rebuild(); updateTop(); renderSettings(); };
+      if(P.year===y) P.year=Math.max(...P.years); if(P.yearColors) delete P.yearColors[y]; save(); fillYearSel(); rebuild(); updateTop(); renderSettings(); };
     ch.appendChild(d); });
   $('#fingerDraw').checked=P.set.fingerDraw;
   $('#fadeRange').value=P.set.fade; $('#fadeOut').textContent=Math.round(P.set.fade*100)+'%';
@@ -594,10 +614,9 @@ function renderSettings(){
   $('#bulkNames').value=P.species.map(s=>s.name).join('\n');
   const ed=$('#spEdit'); ed.innerHTML='';
   P.species.forEach((s,i)=>{ const r=document.createElement('div'); r.className='sprow';
-    r.innerHTML=`<span class="note">${pad2(i+1)}</span><input type="text" value="${esc(s.name)}"><input type="color" value="${s.color}">`;
-    const [n,c]=r.querySelectorAll('input');
+    r.innerHTML=`<span class="note">${pad2(i+1)}</span><input type="text" value="${esc(s.name)}">`;
+    const [n]=r.querySelectorAll('input');
     n.onchange=()=>{ s.name=n.value.trim()||s.name; save(); updateTop(); };
-    c.oninput=()=>{ s.color=c.value; save(); if(i===P.sp){ rebuild('cur'); updateTop(); } };
     ed.appendChild(r); });
   $('#scaleNote').textContent=`現在の縮尺：画面上の1ピクセル = ${(P.mpp*100).toFixed(2)} cm（初期値は図面の通り芯間隔 6,000mm から算出）`;
 }
@@ -608,9 +627,9 @@ $('#alphaRange').oninput=e=>{ P.set.alpha=+e.target.value; $('#alphaOut').textCo
 $('#alphaRange').onchange=()=>rebuild('cur');
 $('#applyNames').onclick=()=>{ const names=$('#bulkNames').value.split(/\r?\n/).map(s=>s.trim());
   while(names.length && !names[names.length-1]) names.pop();
-  names.forEach((n,i)=>{ if(!n) return; if(i>=P.species.length) P.species.push({id:'sp'+Date.now()+'_'+i, name:n, color:autoColor(i)}); else P.species[i].name=n; });
+  names.forEach((n,i)=>{ if(!n) return; if(i>=P.species.length) P.species.push({id:'sp'+Date.now()+'_'+i, name:n}); else P.species[i].name=n; });
   save(); updateTop(); renderSettings(); toast('名前を反映しました'); };
-$('#addSpecies').onclick=()=>{ const i=P.species.length; P.species.push({id:'sp'+Date.now(), name:'野草'+pad2(i+1), color:autoColor(i)}); save(); renderSettings(); };
+$('#addSpecies').onclick=()=>{ const i=P.species.length; P.species.push({id:'sp'+Date.now(), name:'野草'+pad2(i+1)}); save(); renderSettings(); };
 $('#resetCalib').onclick=()=>{ P.mpp=DEFAULT_MPP; save(); renderSettings(); updateTop(); toast('縮尺を初期値に戻しました'); };
 $('#recalib').onclick=()=>{ closeSheet(); const pts=[];
   startPick('距離が分かる1点目をタップしてください', (x,y)=>{ pts.push([x,y]); pickMarks.push({x,y,label:String(pts.length)}); requestDraw();
@@ -622,6 +641,16 @@ $('#clearLayer').onclick=()=>{ if(!shapesOf(curKey()).length) return toast('消�
   if(!confirm(`${P.year}年「${P.species[P.sp].name}」の分布を全部消します。（「戻す」で元に戻せます）`)) return;
   setShapes(curKey(), []); rebuild('cur'); updateTop(); closeSheet(); };
 
+$('#reseed').onclick=async()=>{
+  if(!confirm('2024年・2025年の分布を、アプリに入っている初期データ（250508野草分布.dxf から作成）で置き換えます。2026年以降のデータはそのままです。よろしいですか？')) return;
+  try{ const r=await fetch('seed.json'); const sd=await r.json();
+    for(const sp of sd.species){ let i=P.species.findIndex(x=>x.name===sp.name); if(i<0){ P.species.push({id:'sp'+Date.now()+'_'+P.species.length, name:sp.name}); i=P.species.length-1; }
+      for(const y of [2024,2025]){ const k=keyOf(y,i), sk=y+'|'+sp.id; if(sd.layers[sk]) P.layers[k]=sd.layers[sk]; else delete P.layers[k];
+        if(sd.labels && sd.labels[sk]!=null) P.labels[k]=sd.labels[sk]; else delete P.labels[k]; bump(k); } }
+    for(const y of [2024,2025]) if(!P.years.includes(y)) P.years.push(y);
+    save(); fillYearSel(); rebuild(); updateTop(); toast('初期データを読み込み直しました');
+  }catch(e){ toast('初期データを読み込めませんでした（インターネット接続を確認してください）',4000); }
+};
 /* 背景差し替え */
 $('#bgFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; await DB.set('bg', f); await loadBase(); toast('背景図面を差し替えました。必要なら縮尺を設定し直してください'); e.target.value=''; };
 $('#bgReset').onclick=async()=>{ await DB.del('bg'); await loadBase(); toast('元の図面に戻しました'); };
@@ -632,7 +661,7 @@ $('#backupSave').onclick=()=>{ const blob=new Blob([JSON.stringify(P)],{type:'ap
 $('#backupLoad').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; e.target.value='';
   try{ const o=JSON.parse(await f.text()); if(o.app!=='yasou-bunpu'||!o.species) throw new Error('このアプリのバックアップではありません');
     if(!confirm('いまのデータをバックアップの内容で置き換えます。よろしいですか？')) return;
-    P=Object.assign(defaultProject(), o); P.set=Object.assign(defaultProject().set, o.set||{});
+    P=Object.assign(defaultProject(), o); P.set=Object.assign(defaultProject().set, o.set||{}); P.labels=P.labels||{}; P.yearColors=P.yearColors||{};
     ver.clear(); areaCache.clear(); hist.clear(); await DB.set('project',P); applyAll(); toast('バックアップを読み込みました'); }
   catch(err){ toast('読み込めませんでした：'+err.message, 4000); } };
 
@@ -652,38 +681,36 @@ async function shareOrSave(blob, name){
 /* ============ 画像出力 ============ */
 function fileSafe(s){ return String(s).replace(/[\\/:*?"<>|\s]+/g,'_'); }
 function exportCanvas(spIdx, year, withPrev){
-  const HEAD=250, c=newCanvas(W, H+HEAD), g=c.getContext('2d'), s=P.species[spIdx];
+  const c=newCanvas(W, H), g=c.getContext('2d'), s=P.species[spIdx];
   const ys=[...P.years].sort((a,b)=>a-b), yi=ys.indexOf(year), py=yi>0?ys[yi-1]:null;
-  const F='"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
-  g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
-  // 見出し
-  g.fillStyle='#1E2B23'; g.textBaseline='alphabetic';
-  g.font=`500 40px ${F}`; g.fillText(`野草分布図　${year}年`, 70, 82);
-  g.font=`700 78px ${F}`; g.fillText(`No.${pad2(spIdx+1)}　${s.name}`, 70, 182);
-  // 凡例
-  const a=areaOf(year,spIdx), lx=W-1020; let ly=70;
-  const sw=(y, kind)=>{ g.save(); g.beginPath(); g.rect(lx,y-34,86,42);
-    if(kind==='fill'){ g.globalAlpha=P.set.alpha; g.fillStyle=s.color; g.fill(); g.globalAlpha=1; g.strokeStyle=s.color; }
-    else { g.fillStyle=hatchPattern(g, PREV_COLOR); g.fill(); g.strokeStyle=PREV_COLOR; }
-    g.lineWidth=3; g.stroke(); g.restore(); };
-  g.font=`500 38px ${F}`; g.fillStyle='#1E2B23';
-  sw(ly,'fill'); g.fillText(`${year}年 分布`, lx+110, ly); g.textAlign='right'; g.fillText(`${fmtA(a)} m²`, W-70, ly); g.textAlign='left';
-  if(py!=null){ const b=areaOf(py,spIdx);
-    if(withPrev){ ly+=62; sw(ly,'hatch'); g.fillText(`${py}年 分布`, lx+110, ly); g.textAlign='right'; g.fillText(`${fmtA(b)} m²`, W-70, ly); g.textAlign='left'; }
-    ly+=62; const d=a-b; const pct=b>0?`（${d>=0?'+':''}${(d/b*100).toFixed(0)}%）`:'';
-    g.fillStyle='#5C6B61'; g.fillText(`前年比`, lx+110, ly); g.textAlign='right'; g.fillText(`${d>=0?'+':''}${fmtA(d)} m²${pct}`, W-70, ly); g.textAlign='left'; }
-  g.fillStyle='#1E2B23'; g.fillRect(70, HEAD-22, W-140, 3);
-  // 図面
-  g.translate(0,HEAD); g.drawImage(baseImg,0,0);
+  const F='"Hiragino Sans","Hiragino Kaku Gothic ProN","MS PGothic","Noto Sans JP",sans-serif';
+  const k=W/2924; // 背景を差し替えた場合の倍率
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H); g.drawImage(baseImg,0,0);
   if(P.set.fade>0){ g.fillStyle=`rgba(255,255,255,${P.set.fade})`; g.fillRect(0,0,W,H); }
-  if(withPrev && py!=null){ const L=buildLayer(shapesOf(keyOf(py,spIdx)),'hatch',PREV_COLOR); if(L) g.drawImage(L.c,L.x,L.y); }
-  const L=buildLayer(shapesOf(keyOf(year,spIdx)),'fill',s.color,P.set.alpha,3); if(L) g.drawImage(L.c,L.x,L.y);
+  const rows=[{y:year, kind:'fill'}]; if(withPrev && py!=null) rows.push({y:py, kind:'hatch'});
+  if(withPrev && py!=null){ const L=buildLayer(shapesOf(keyOf(py,spIdx)),'hatch',yearColor(py)); if(L) g.drawImage(L.c,L.x,L.y); }
+  const L=buildLayer(shapesOf(keyOf(year,spIdx)),'fill',yearColor(year),P.set.alpha,2); if(L) g.drawImage(L.c,L.x,L.y);
+  // 凡例（過去図面と同じ位置・体裁）
+  g.save(); g.scale(k,k); g.textBaseline='top';
+  g.font=`${LEG.font}px ${F}`; g.fillStyle=yearColor(year); g.fillText('凡例', LEG.x, LEG.y);
+  rows.forEach((r,i)=>{
+    const dy=LEG.line*(2+i), col=yearColor(r.y), sw=LEG.swatch;
+    g.save(); g.translate(0,LEG.line*i); g.beginPath(); g.moveTo(sw[0],sw[1]); for(let j=2;j<sw.length;j+=2) g.lineTo(sw[j],sw[j+1]); g.closePath();
+    if(r.kind==='fill'){ g.globalAlpha=P.set.alpha; g.fillStyle=col; g.fill(); g.globalAlpha=1; } else { g.fillStyle=hatchPattern(g,col); g.fill(); }
+    g.strokeStyle=col; g.lineWidth=2; g.stroke(); g.restore();
+    const lab=yearLabel(r.y,spIdx); let t=`：${s.name}${lab?`（${lab}）`:''}`;
+    if(P.set.expArea) t+=`　${fmtA(areaOf(r.y,spIdx))}㎡`;
+    g.fillStyle=col; g.beginPath(); g.arc(LEG.x+12, LEG.y+dy+14, 11.5, 0, Math.PI*2); g.fill();
+    g.fillText(t, LEG.x+26, LEG.y+dy+1);
+  });
+  g.restore();
   return c;
 }
 const toBlob = c => new Promise(r=>c.toBlob(r,'image/png'));
 $('#expPrev').onchange=e=>{ P.set.expPrev=e.target.checked; save(); };
+$('#expArea').onchange=e=>{ P.set.expArea=e.target.checked; save(); };
 $('#expOne').onclick=async()=>{ const c=exportCanvas(P.sp,P.year,P.set.expPrev); const b=await toBlob(c);
-  await shareOrSave(b, `${P.year}_${pad2(P.sp+1)}_${fileSafe(P.species[P.sp].name)}.png`); };
+  await shareOrSave(b, `${pad2(P.sp+1)}_${fileSafe(P.species[P.sp].name)}_${P.year}.png`); };
 function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('ZIP機能を読み込めませんでした（初回はインターネット接続が必要です）')); document.head.appendChild(s); }); }
 $('#expAll').onclick=async()=>{
   const btn=$('#expAll'), prog=$('#expProg'), bar=prog.querySelector('i'); btn.disabled=true;
@@ -693,7 +720,7 @@ $('#expAll').onclick=async()=>{
     for(let i=0;i<P.species.length;i++){
       bar.style.width=((i/P.species.length)*100)+'%'; btn.textContent=`作成中… ${i+1} / ${P.species.length}`;
       await new Promise(r=>setTimeout(r,0));
-      const c=exportCanvas(i,P.year,P.set.expPrev); dir.file(`${P.year}_${pad2(i+1)}_${fileSafe(P.species[i].name)}.png`, await toBlob(c));
+      const c=exportCanvas(i,P.year,P.set.expPrev); dir.file(`${pad2(i+1)}_${fileSafe(P.species[i].name)}_${P.year}.png`, await toBlob(c));
       c.width=c.height=1;
     }
     dir.file(`面積一覧_${P.year}.csv`, csvText());
@@ -838,7 +865,7 @@ function extractShapes(ents){
 
 /* DXF 取り込みUI */
 const dxf={data:null, layers:[], A:null, B:null, returnAfterPick:false};
-$('#openDxf').onclick=()=>openSheet('sheetDxf');
+$('#openDxf').onclick=()=>{ fillNoYear(); openSheet('sheetDxf'); };
 $('#dxfFile').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return; e.target.value='';
   $('#dxfName').textContent=f.name; $('#dxfSummary').textContent='読み込み中…';
@@ -847,19 +874,38 @@ $('#dxfFile').onchange=async e=>{
     const m=text.match(/\$ACADVER\s*\r?\n\s*1\s*\r?\n\s*(AC\d+)/);
     if(m && m[1]<'AC1021') text=new TextDecoder('shift_jis').decode(buf);
     if(text.startsWith('AutoCAD Binary DXF')) throw new Error('バイナリ形式のDXFです。AutoCADでASCII形式で保存し直してください');
-    const {ents}=parseDXF(text); const {items, stat}=extractShapes(ents);
+    const {ents}=parseDXF(text); dxf.ents=ents; buildDxfLayers();
+  }catch(err){ $('#dxfSummary').textContent=err.message; $('#dxfStep2').classList.add('hidden'); }
+};
+function buildDxfLayers(){
+  try{
+    const {items:all, stat}=extractShapes(dxf.ents);
+    const skipLeg=$('#dxfSkipLegend').checked, hOnly=$('#dxfHatchOnly').checked;
+    let legN=0;
+    const items=all.filter(it=>{ if(hOnly && !it.hatch) return false;
+      if(skipLeg){ let x0=Infinity,y1=-Infinity; for(const r of it.rings) for(const p of r){ if(p[0]<x0)x0=p[0]; if(p[1]>y1)y1=p[1]; }
+        if(x0>61500 && y1<34300){ legN++; return false; } }
+      return true; });
     if(!items.length) throw new Error(`取り込める閉じた図形が見つかりませんでした（閉じていない線 ${stat.open}本、ブロック ${stat.insert}個）。分布がブロック内にある場合は分解（EXPLODE）してから保存してください`);
     dxf.data=items;
     const byL=new Map(); for(const it of items){ if(!byL.has(it.layer)) byL.set(it.layer,[]); byL.get(it.layer).push(it); }
-    dxf.layers=[...byL.entries()].map(([name,arr])=>({name, items:arr, on:true, sp:guessSp(name), year:guessYear(name)}));
-    let xs=[],ys=[]; for(const it of items) for(const r of it.rings) for(const p of r){ xs.push(p[0]); ys.push(p[1]); }
-    const ext=`X ${Math.min(...xs).toFixed(0)}〜${Math.max(...xs).toFixed(0)}、Y ${Math.min(...ys).toFixed(0)}〜${Math.max(...ys).toFixed(0)}`;
+    const ny=+$('#dxfNoYear').value||null;
+    dxf.layers=[...byL.entries()].map(([name,arr])=>{ const sp=guessSp(name), year=guessYear(name)||ny; return {name, items:arr, on:sp>=0, sp, year}; }).sort((a,b)=>(b.on-a.on));
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity; for(const it of items) for(const r of it.rings) for(const p of r){ if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0]; if(p[1]<y0)y0=p[1]; if(p[1]>y1)y1=p[1]; }
+    const ext=`X ${x0.toFixed(0)}〜${x1.toFixed(0)}、Y ${y0.toFixed(0)}〜${y1.toFixed(0)}`;
     $('#dxfSummary').textContent=`レイヤ ${dxf.layers.length}件、閉じた図形 ${items.length}個を見つけました（範囲 ${ext}）。`+
-      (stat.open?` 閉じていない線 ${stat.open}本は対象外です。`:'')+(stat.insert?` ブロック ${stat.insert}個は対象外です（必要なら分解してから保存）。`:'');
-    $('#dxfStep2').classList.remove('hidden'); renderLayerTbl();
-  }catch(err){ $('#dxfSummary').textContent=err.message; $('#dxfStep2').classList.add('hidden'); }
-};
-function guessSp(name){ let best=-1, bl=0; P.species.forEach((s,i)=>{ if(s.name && name.includes(s.name) && s.name.length>bl){ best=i; bl=s.name.length; } }); return best; }
+      (stat.open?` 閉じていない線 ${stat.open}本は対象外です。`:'')+(stat.insert?` ブロック ${stat.insert}個は対象外です（必要なら分解してから保存）。`:'')+(legN?` 凡例部分の ${legN}個は除きました。`:'');
+    $('#dxfStep2').classList.remove('hidden'); $('#dxfSummary').scrollIntoView({block:'nearest'}); renderLayerTbl();
+  }catch(err){ $('#dxfSummary').textContent=err.message; }
+}
+['dxfHatchOnly','dxfSkipLegend','dxfNoYear'].forEach(id=>$('#'+id).onchange=()=>{ if(dxf.ents) buildDxfLayers(); });
+$('#dxfAlign').onchange=e=>$('#dxfManual').classList.toggle('hidden', e.target.value!=='manual');
+function fillNoYear(){ const sel=$('#dxfNoYear'), v=sel.value; sel.innerHTML=[...P.years].sort((a,b)=>a-b).map(y=>`<option value="${y}">${y}年</option>`).join('');
+  sel.value = v || (P.years.includes(2024)?2024:P.years[0]); }
+const layerBase = n => n.replace(/^野草/,'').replace(/20\d{2}.*$/,'').replace(/[\s_\-－・.]+$/,'').trim();
+function guessSp(name){ const b=layerBase(name); let i=P.species.findIndex(s=>s.name===b); if(i>=0) return i;
+  if(/SP$/i.test(b)){ i=P.species.findIndex(s=>s.name.startsWith(b.replace(/SP$/i,''))&&s.name.includes('一種')); if(i>=0) return i; }
+  let best=-1, bl=0; P.species.forEach((s,j)=>{ if(s.name && name.includes(s.name) && s.name.length>bl){ best=j; bl=s.name.length; } }); return best; }
 function guessYear(name){ const m=name.match(/20(\d{2})/); if(m) return 2000+ +m[1]; const m2=name.match(/(?:^|[^0-9])(2\d)(?:[^0-9]|$)/); if(m2) return 2000+ +m2[1]; return null; }
 function renderLayerTbl(){
   const ys=[...P.years].sort((a,b)=>a-b);
@@ -873,10 +919,10 @@ function renderLayerTbl(){
     t.appendChild(tr); });
 }
 $('#namesFromLayers').onclick=()=>{
-  const names=[]; for(const l of dxf.layers){ const n=l.name.replace(/20\d{2}|(^|[^0-9])2\d(?=[^0-9]|$)/g,'$1').replace(/^[\s_\-－・.]+|[\s_\-－・.]+$/g,'').replace(/年$/,'').trim(); if(n && !names.includes(n)) names.push(n); }
+  const names=[]; for(const l of dxf.layers){ const n=layerBase(l.name); if(n && !names.includes(n)) names.push(n); }
   if(!names.length) return toast('レイヤ名から種名を取り出せませんでした');
   if(!confirm(`レイヤ名から ${names.length}種の名前を取り出しました。No.1から順に種名として登録しますか？\n\n${names.slice(0,8).join('、')}${names.length>8?' …':''}`)) return;
-  names.forEach((n,i)=>{ if(i>=P.species.length) P.species.push({id:'sp'+Date.now()+'_'+i,name:n,color:autoColor(i)}); else P.species[i].name=n; });
+  names.forEach((n,i)=>{ if(i>=P.species.length) P.species.push({id:'sp'+Date.now()+'_'+i,name:n}); else P.species[i].name=n; });
   dxf.layers.forEach(l=>l.sp=guessSp(l.name)); save(); updateTop(); renderLayerTbl(); toast('種名を登録しました');
 };
 function ptInputs(id){ const el=$('#'+id); return {X:parseFloat(el.querySelector('[data-k=X]').value), Y:parseFloat(el.querySelector('[data-k=Y]').value)}; }
@@ -885,6 +931,8 @@ function ptInputs(id){ const el=$('#'+id); return {X:parseFloat(el.querySelector
     dxf[id==='ptA'?'A':'B']={x,y}; endPick(); dxf.returnAfterPick=false;
     $('#'+id+' [data-st]').innerHTML=`<span class="ok">指定済み</span>（${x.toFixed(0)}, ${y.toFixed(0)}）`; openSheet('sheetDxf'); }); }; });
 function dxfTransform(){
+  if($('#dxfAlign').value==='auto'){ const S=250/25.4*(W/2924);
+    return (x,y)=>[S*(144.3190031+(x-55142.8199)/225), S*(209.88-(101.0781589+(y-44200.4944)/225))]; }
   const u=+$('#dxfUnit').value; const a=ptInputs('ptA'), b=ptInputs('ptB');
   if(!dxf.A || isNaN(a.X) || isNaN(a.Y)) throw new Error('基準点Aの座標を入力し、図面上で位置を指定してください');
   if(dxf.B && !isNaN(b.X) && !isNaN(b.Y)){
@@ -930,12 +978,13 @@ function applyAll(){
   fillYearSel(); setTool(P.set.tool||'lasso');
   $('#prevBtn').setAttribute('aria-pressed',P.set.showPrev);
   $('#sizeRange').value=P.set.brushM; $('#sizeOut').textContent=P.set.brushM.toFixed(1)+' m';
-  $('#expPrev').checked=P.set.expPrev!==false;
+  $('#expPrev').checked=!!P.set.expPrev; $('#expArea').checked=!!P.set.expArea;
   rebuild(); updateTop();
 }
 (async()=>{
   try{ await DB.open(); const saved=await DB.get('project');
-    P = saved || defaultProject(); P.set=Object.assign(defaultProject().set, P.set||{});
+    if(saved) P=saved; else { try{ P=await seedProject(); }catch(e){ P=defaultProject(); } }
+    P.set=Object.assign(defaultProject().set, P.set||{}); P.labels=P.labels||{}; P.yearColors=P.yearColors||{};
     if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
   }catch(e){ P=defaultProject(); toast('このブラウザではデータを保存できません（プライベートブラウズ中かもしれません）', 5000); }
   resize(); addEventListener('resize', ()=>{ resize(); });
