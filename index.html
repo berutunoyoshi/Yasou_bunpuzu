@@ -108,9 +108,10 @@ button{cursor:pointer}
   background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);max-height:calc(100% - 24px);height:max-content}
 .rail::-webkit-scrollbar{display:none}
 .rail hr{border:0;border-top:1px solid var(--line);margin:4px 6px;flex:none}
-.tool{flex:none;width:72px;height:52px;border:0;border-radius:12px;background:transparent;display:flex;flex-direction:column;
+.tool{flex:none;width:72px;height:50px;border:0;border-radius:12px;background:transparent;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--ink);white-space:nowrap;position:relative}
 .tool[aria-pressed="true"]{background:var(--moss);color:var(--moss-ink)}
+@media (max-height:900px){ .tool{height:45px;gap:2px;font-size:10.5px} .tool svg{width:20px;height:20px} .tool .sw{width:22px;height:22px} .rail hr{margin:3px 6px} }
 .tool:disabled{opacity:.3}
 .tool .sw{width:26px;height:26px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 
@@ -223,6 +224,8 @@ table.list tr[data-i]{cursor:pointer}
 .ok{color:var(--moss)}
 .kbd{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:12px;background:var(--panel)}
 .help li{margin:6px 0;line-height:1.6}
+.ovrow{border-bottom:1px solid var(--line);margin-bottom:6px}
+#ovPop{max-height:calc(100% - 24px);overflow:auto}
 </style>
 </head>
 <body>
@@ -291,6 +294,7 @@ table.list tr[data-i]{cursor:pointer}
       <hr>
       <button class="tool" id="colorBtn"><span class="sw" id="colorSw"></span>色</button>
       <button class="tool" id="refBtn"><svg viewBox="0 0 24 24"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5" stroke-dasharray="2.5 2.5"/></svg><span id="refLbl">前年</span></button>
+      <button class="tool" id="ovBtn"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 15c1.5-2 2.5 1 4-1s2 0 2.5-1" /></svg>現地の下絵</button>
     </div>
 
     <div class="pop" id="colorPop" role="dialog" aria-label="色">
@@ -310,6 +314,16 @@ table.list tr[data-i]{cursor:pointer}
       <div class="range" style="grid-template-columns:5.5em 1fr 3em"><span>下絵の濃さ</span><input type="range" id="underRange" min="0.1" max="0.8" step="0.05"><output id="underOut"></output></div>
       <div class="row"><button class="btn wide" id="copyRef">この年度の分布を写して描き始める</button></div>
       <p class="note">「写して描き始める」は、重ねている年度の分布を表示中の年度にコピーします。変わった所だけ直せば済みます（「戻す」で取り消せます）。</p>
+    </div>
+
+    <div class="pop" id="ovPop" role="dialog" aria-label="現地の下絵">
+      <h3>現地で描いたPDF・画像を下絵にする</h3>
+      <div id="ovList"></div>
+      <div class="range" style="grid-template-columns:5.5em 1fr 3em"><span>下絵の濃さ</span><input type="range" id="ovAlpha" min="0.1" max="1" step="0.05"><output id="ovAlphaOut"></output></div>
+      <label class="switch"><span>白い部分を透明にする</span><input type="checkbox" id="ovWhite"></label>
+      <label class="switch"><span>黒・灰色の線も消す（色の付いた書き込みだけ残す）</span><input type="checkbox" id="ovGray"></label>
+      <div class="row"><button class="btn primary wide" id="ovAdd">PDF・画像を読み込む</button></div>
+      <p class="note">下絵は描くときの目安です。面積や出力には含まれません。</p>
     </div>
 
     <div class="ctxbar"><div id="ctx"></div></div>
@@ -412,6 +426,22 @@ table.list tr[data-i]{cursor:pointer}
 </section>
 
 <!-- 使い方 -->
+<section class="sheet" id="sheetOv" aria-label="下絵の読み込み">
+  <header><h2>現地の下絵を読み込む</h2><button class="btn" data-close>閉じる</button></header>
+  <div class="body">
+    <p class="note">現地でPDFに書き込んだ図面や、紙に描いた図面の写真を読み込み、背景に重ねて表示します。iPadで書き込んだ手書き（マークアップ）もそのまま表示されます。</p>
+    <div class="row"><label class="btn primary" style="display:inline-flex;align-items:center">PDF・画像を選ぶ<input type="file" id="ovFile" accept="application/pdf,.pdf,image/*" hidden></label><span class="note" id="ovName"></span></div>
+    <p class="note" id="ovMsg"></p>
+    <div id="ovStep2" class="hidden">
+      <div class="row" id="ovPageRow"><label class="field" style="flex:1"><span>使うページ</span><select id="ovPage"></select></label></div>
+      <canvas id="ovPrev" width="520" height="370" style="width:100%;max-width:520px;border:1px solid var(--line);border-radius:12px;background:#fff"></canvas>
+      <h3>表示する種</h3>
+      <div class="seg" id="ovScope" style="width:100%"><button data-s="key" style="flex:1">表示中の種だけ（<span id="ovFor"></span>）</button><button data-s="all" style="flex:1">すべての種</button></div>
+      <div class="row"><button class="btn primary wide" id="ovDo">下絵として取り込む</button></div>
+    </div>
+  </div>
+</section>
+
 <section class="sheet" id="sheetHelp" aria-label="使い方">
   <header><h2>使い方</h2><button class="btn" data-close>閉じる</button></header>
   <div class="body help">
@@ -432,6 +462,7 @@ table.list tr[data-i]{cursor:pointer}
       <li><b>選んで直す</b>：範囲をタップで選ぶと点（丸印）が出ます。丸印をドラッグで移動、線の上をタップで点を追加、丸印を選んで「選んだ点を削除」。内側をドラッグすると全体を移動します。点が細かいときは拡大してから操作してください。</li>
       <li><b>色</b>：表示中の年度の色と塗りの濃さを変えます。</li>
       <li><b>前年</b>：ほかの年度の分布を斜線や下絵で重ねます。前年の分布を写してから直すこともできます。</li>
+      <li><b>現地の下絵</b>：現地でPDFに書き込んだ図面や紙の写真を読み込み、背景に重ねます。同じ図面のPDFなら位置は自動で合い、違う場合は2点をタップして合わせます。「黒・灰色の線も消す」で手書きの部分だけを残せます。</li>
     </ul>
     <h3>キーボード（接続時）</h3>
     <ul>
@@ -482,9 +513,10 @@ table.list tr[data-i]{cursor:pointer}
 <script>
 'use strict';
 /* ============ バージョン ============ */
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 const APP_DATE = '2026年11月26日';
 const CHANGES = [
+  '現地の下絵：現地で書き込んだPDFや写真を背景に重ねて表示（位置は自動または2点で合わせる）',
   'CAD用データ（DXF）の書き出し：レイヤ「野草＋種名＋年度」、ハッチと輪郭線、凡例付き',
   '前年から写す：消しゴムで消した後でも、同じ範囲をもう一度写せるように修正',
   '多角形ツール：タップした点をつないで範囲を作る',
@@ -527,7 +559,7 @@ function defaultProject(){
     species:Array.from({length:50},(_,i)=>({id:'sp'+(i+1), name:'野草'+pad2(i+1)})),
     sp:0, mpp:DEFAULT_MPP, layers:{}, labels:{}, yearColors:{}, done:{}, updatedAt:null,
     set:{fingerDraw:false, refMode:'hatch', refYear:null, under:0.35, fade:0, alpha:0.5, brushM:1.0, dotM:0.3, tool:'lasso',
-         expPrev:false, expArea:true, legPos:'bl', expYear:null} };
+         expPrev:false, expArea:true, legPos:'bl', expYear:null, ovAlpha:0.7, ovWhite:true, ovGray:false, ovScope:'key'} };
 }
 let P = null;
 const keyOf = (y, spIdx) => y + '|' + P.species[spIdx].id;
@@ -543,7 +575,7 @@ async function seedProject(){
   const p=defaultProject(); p.species=sd.species; p.layers=sd.layers; p.labels=sd.labels||{}; p.seeded=true; p.year=2026; return p;
 }
 function migrate(){
-  P.labels=P.labels||{}; P.yearColors=P.yearColors||{}; P.done=P.done||{};
+  P.labels=P.labels||{}; P.yearColors=P.yearColors||{}; P.done=P.done||{}; P.overlays=P.overlays||[];
   P.set=Object.assign(defaultProject().set, P.set||{});
   if(P.set.tool==='lassoE') P.set.tool='lasso';
   if((P.migr||0)<3){
@@ -651,8 +683,14 @@ function draw(){
   if(!baseImg) return;
   c.setTransform(dpr*Z,0,0,dpr*Z,dpr*TX,dpr*TY);
   c.imageSmoothingEnabled = Z<1.5;
-  c.fillStyle='#fff'; c.fillRect(0,0,W,H); c.drawImage(baseImg,0,0);
+  c.fillStyle='#fff'; c.fillRect(0,0,W,H);
+  if(align){ c.imageSmoothingEnabled=true; if(align.step%2===0) drawOverlays(c, align.o); else c.drawImage(baseImg,0,0);
+    for(const m of pickMarks){ c.strokeStyle='#E0262B'; c.lineWidth=2/Z; const s=14/Z; c.beginPath(); c.moveTo(m.x-s,m.y); c.lineTo(m.x+s,m.y); c.moveTo(m.x,m.y-s); c.lineTo(m.x,m.y+s); c.stroke();
+      c.fillStyle='#E0262B'; c.font=`bold ${14/Z}px sans-serif`; c.fillText(m.label, m.x+s*0.6, m.y-s*0.6); }
+    return; }
+  c.drawImage(baseImg,0,0);
   if(P.set.fade>0){ c.fillStyle=`rgba(255,255,255,${P.set.fade})`; c.fillRect(0,0,W,H); }
+  c.imageSmoothingEnabled = true; drawOverlays(c);
   c.imageSmoothingEnabled = true;
   if((P.set.refMode!=='off' || P.set.tool==='copy') && refL) c.drawImage(refL.c, refL.x, refL.y);
   if(curL) c.drawImage(curL.c, curL.x, curL.y);
@@ -957,6 +995,7 @@ function updateUI(){
   $('#refBtn').setAttribute('aria-pressed', P.set.refMode!=='off');
   const h=H_(curKey()); $('#undoBtn').disabled=!h.u.length; $('#redoBtn').disabled=!h.r.length;
   renderYearBar();
+  if($('#ovBtn')) $('#ovBtn').setAttribute('aria-pressed', ovs().some(o=>o.vis && ovApplies(o)));
 }
 const updateTop = updateUI; // DXF処理などから呼ばれる
 function renderYearBar(){
@@ -1417,7 +1456,7 @@ $('#expCad').onclick=async()=>{
 function setBanner(t, go){ $('#bannerText').textContent=t; $('#banner').classList.add('on'); $('#bannerGo').classList.toggle('hidden', !go); }
 function startPick(text, cb){ pickCb=cb; setBanner(text); }
 function endPick(){ pickCb=null; $('#banner').classList.remove('on'); }
-$('#bannerCancel').onclick=()=>{ const wasPreview=!!importPreview; endPick(); importPreview=null; pickMarks=[]; requestDraw(); if(wasPreview||dxf.returnAfterPick) { dxf.returnAfterPick=false; openSheet('sheetDxf'); } };
+$('#bannerCancel').onclick=()=>{ if(align){ align=null; endPick(); pickMarks=[]; requestDraw(); toast('位置合わせをやめました'); return; } const wasPreview=!!importPreview; endPick(); importPreview=null; pickMarks=[]; requestDraw(); if(wasPreview||dxf.returnAfterPick) { dxf.returnAfterPick=false; openSheet('sheetDxf'); } };
 $('#bannerGo').onclick=()=>{ importPreview=null; endPick(); doImport(); };
 
 /* ============ DXF 読み込み ============ */
@@ -1643,6 +1682,135 @@ function doImport(){
 }
 
 
+
+/* ============ 下絵（現地で描いたPDF・画像） ============ */
+const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const ovCache=new Map();   // id -> {src:canvas, disp:canvas, sig}
+let align=null;            // 位置合わせ中 {o, step, u:[], p:[]}
+let ovImport=null;         // 取り込み中のファイル {kind, pdf, file, pages, canvas}
+const ovs = () => (P.overlays=P.overlays||[]);
+const ovApplies = o => o.scope==='all' || o.key===curKey();
+const ovSig = () => `${!!P.set.ovWhite}|${!!P.set.ovGray}`;
+function ovProcess(src){
+  const c=newCanvas(src.width,src.height), g=c.getContext('2d',{willReadFrequently:true}); g.drawImage(src,0,0);
+  if(!P.set.ovWhite && !P.set.ovGray) return c;
+  const im=g.getImageData(0,0,c.width,c.height), d=im.data;
+  for(let i=0;i<d.length;i+=4){ const r=d[i],gg=d[i+1],b=d[i+2], mx=Math.max(r,gg,b), mn=Math.min(r,gg,b);
+    if(P.set.ovWhite && mn>225) d[i+3]=0;
+    else if(P.set.ovGray && mx-mn<50) d[i+3]=0; }
+  g.putImageData(im,0,0); return c;
+}
+async function ovEnsure(o){
+  let e=ovCache.get(o.id);
+  if(e && e.sig===ovSig()) return e;
+  if(e && e.loading) return null;
+  if(!e){ e={loading:true}; ovCache.set(o.id,e);
+    const blob=await DB.get('ov:'+o.id).catch(()=>null); if(!blob){ ovCache.delete(o.id); return null; }
+    const bmp=await createImageBitmap(blob); e.src=newCanvas(bmp.width,bmp.height); e.src.getContext('2d').drawImage(bmp,0,0); }
+  e.disp=ovProcess(e.src); e.sig=ovSig(); e.loading=false; requestDraw(); return e;
+}
+function drawOverlays(c, only){
+  for(const o of ovs()){
+    if(only ? o!==only : !(o.vis && ovApplies(o))) continue;
+    const e=ovCache.get(o.id); if(!e || !e.disp || e.sig!==ovSig()){ ovEnsure(o); continue; }
+    c.save(); c.transform(...o.m); c.globalAlpha= only ? 1 : P.set.ovAlpha; c.drawImage(e.disp,0,0); c.restore();
+  }
+}
+/* 2点で位置を合わせる */
+function startAlign(o){
+  closeSheet(); closePops(); showEditor(); align={o, step:0, u:[], p:[]}; nextAlignStep();
+}
+function nextAlignStep(){
+  const a=align, msg=['下絵（PDF）で、位置の分かる1点目（通り芯の交点など）をタップ','背景の図面で、同じ1点目をタップ','下絵（PDF）で、1点目から離れた2点目をタップ','背景の図面で、同じ2点目をタップ'][a.step];
+  pickMarks = a.step%2===0 ? a.u.map((q,i)=>({x:q.bx,y:q.by,label:String(i+1)})) : a.p.map((q,i)=>({x:q[0],y:q[1],label:String(i+1)}));
+  requestDraw();
+  startPick(`${a.step+1}/4：${msg}（指で拡大できます）`, (x,y)=>{
+    if(a.step%2===0){ const inv=new DOMMatrix(a.o.m).inverse(), q=inv.transformPoint(new DOMPoint(x,y)); a.u.push({x:q.x,y:q.y,bx:x,by:y}); }
+    else a.p.push([x,y]);
+    a.step++;
+    if(a.step<4){ nextAlignStep(); return; }
+    endPick(); pickMarks=[];
+    const u1=a.u[0], u2=a.u[1], p1=a.p[0], p2=a.p[1], du=[u2.x-u1.x,u2.y-u1.y], dp=[p2[0]-p1[0],p2[1]-p1[1]], dd=du[0]**2+du[1]**2;
+    if(dd<1){ toast('2つの点が近すぎます。離れた点でやり直してください'); align=null; requestDraw(); return; }
+    const kr=(dp[0]*du[0]+dp[1]*du[1])/dd, ki=(dp[1]*du[0]-dp[0]*du[1])/dd;
+    a.o.m=[kr,ki,-ki,kr, p1[0]-(kr*u1.x-ki*u1.y), p1[1]-(ki*u1.x+kr*u1.y)]; a.o.aligned=true;
+    align=null; save(); requestDraw(); toast('下絵の位置を合わせました');
+  });
+}
+/* 取り込み */
+function loadScriptOnce(src){ return document.querySelector(`script[src="${src}"]`) ? Promise.resolve() : loadScript(src); }
+async function ovRenderPage(n){
+  const page=await ovImport.pdf.getPage(n), v1=page.getViewport({scale:1});
+  const scale=Math.min(4000/Math.max(v1.width,v1.height), W/v1.width*1.0001);
+  const vp=page.getViewport({scale}), cv=newCanvas(vp.width,vp.height), g=cv.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height);
+  await page.render({canvasContext:g, viewport:vp}).promise;   // 手書きの注釈（マークアップ）も描きます
+  return cv;
+}
+function ovPreview(cv){ const pv=$('#ovPrev'), g=pv.getContext('2d'); const s=Math.min(pv.width/cv.width, pv.height/cv.height);
+  g.clearRect(0,0,pv.width,pv.height); g.drawImage(cv,(pv.width-cv.width*s)/2,(pv.height-cv.height*s)/2,cv.width*s,cv.height*s); }
+$('#ovFile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return; e.target.value='';
+  $('#ovName').textContent=f.name; $('#ovStep2').classList.add('hidden'); $('#ovMsg').textContent='読み込み中…';
+  try{
+    if(f.type==='application/pdf' || /\.pdf$/i.test(f.name)){
+      if(!window.pdfjsLib){ await loadScriptOnce(PDFJS+'pdf.min.js'); }
+      pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';
+      const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+      ovImport={kind:'pdf', pdf, file:f, pages:pdf.numPages, page:1};
+      $('#ovPage').innerHTML=Array.from({length:pdf.numPages},(_,i)=>`<option value="${i+1}">${i+1}ページ目</option>`).join('');
+      $('#ovPageRow').classList.toggle('hidden', pdf.numPages<2);
+      ovImport.canvas=await ovRenderPage(1);
+    } else {
+      const bmp=await createImageBitmap(f); const s=Math.min(1, 4000/Math.max(bmp.width,bmp.height));
+      const cv=newCanvas(bmp.width*s,bmp.height*s); cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
+      ovImport={kind:'img', file:f, pages:1, page:1, canvas:cv}; $('#ovPageRow').classList.add('hidden');
+    }
+    ovPreview(ovImport.canvas); $('#ovMsg').textContent=ovAutoFit(ovImport.canvas)? '背景の図面と同じ大きさの図面です。位置は自動で合わせます。' : '大きさが背景の図面と違うため、取り込んだ後に2点で位置を合わせます。';
+    $('#ovStep2').classList.remove('hidden');
+  }catch(err){ $('#ovMsg').textContent='読み込めませんでした：'+(err.message||err); }
+};
+$('#ovPage').onchange=async e=>{ $('#ovMsg').textContent='ページを表示中…'; ovImport.page=+e.target.value; ovImport.canvas=await ovRenderPage(ovImport.page); ovPreview(ovImport.canvas);
+  $('#ovMsg').textContent=ovAutoFit(ovImport.canvas)? '背景の図面と同じ大きさの図面です。位置は自動で合わせます。' : '取り込んだ後に2点で位置を合わせます。'; };
+function ovAutoFit(cv){ return ovImport && ovImport.kind==='pdf' && Math.abs(cv.width/cv.height - W/H) < 0.01; }
+$$('#ovScope button').forEach(b=>b.onclick=()=>{ P.set.ovScope=b.dataset.s; $$('#ovScope button').forEach(x=>x.setAttribute('aria-pressed',x===b)); });
+$('#ovDo').onclick=async()=>{
+  const cv=ovImport && ovImport.canvas; if(!cv) return;
+  const btn=$('#ovDo'); btn.disabled=true;
+  try{
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const id='ov'+Date.now();
+    await DB.set('ov:'+id, blob);
+    const auto=ovAutoFit(cv), s=auto? W/cv.width : Math.min(W/cv.width, H/cv.height);
+    const o={id, name: ovImport.file.name + (ovImport.pages>1?`（${ovImport.page}ページ目）`:''), scope:P.set.ovScope||'key', key:curKey(),
+      label:`${P.year}年 ${P.species[P.sp].name}`, m:[s,0,0,s, auto?0:(W-cv.width*s)/2, auto?0:(H-cv.height*s)/2], vis:true, aligned:auto};
+    ovs().push(o); ovCache.set(id,{src:cv}); save();
+    if(auto){ closeSheet(); showEditor(); requestDraw(); toast('下絵を取り込み、位置を自動で合わせました'); }
+    else startAlign(o);
+  }catch(err){ toast('取り込めませんでした：'+(err.message||err), 4000); }
+  finally{ btn.disabled=false; }
+};
+/* 下絵の一覧（ポップオーバー） */
+function renderOvPop(){
+  const list=ovs().filter(ovApplies), el=$('#ovList');
+  el.innerHTML = list.length ? '' : `<p class="note">この種（${P.year}年）で使える下絵はまだありません。</p>`;
+  list.forEach(o=>{ const r=document.createElement('div'); r.className='ovrow';
+    r.innerHTML=`<label class="switch" style="min-height:40px"><span><b>${esc(o.name)}</b><br><small class="note">${o.scope==='all'?'すべての種で表示':esc(o.label||'')}${o.aligned?'':'・位置未調整'}</small></span><input type="checkbox" ${o.vis?'checked':''}></label>
+      <div class="row" style="margin:2px 0 8px"><button class="btn" data-a="align">位置を合わせる</button><button class="btn warn" data-a="del">削除</button></div>`;
+    r.querySelector('input').onchange=e=>{ o.vis=e.target.checked; save(); requestDraw(); };
+    r.querySelector('[data-a=align]').onclick=()=>startAlign(o);
+    r.querySelector('[data-a=del]').onclick=async()=>{ if(!confirm(`下絵「${o.name}」を削除します。よろしいですか？`)) return;
+      P.overlays=ovs().filter(x=>x!==o); ovCache.delete(o.id); await DB.del('ov:'+o.id); save(); renderOvPop(); requestDraw(); };
+    el.appendChild(r); });
+  $('#ovAlpha').value=P.set.ovAlpha; $('#ovAlphaOut').textContent=Math.round(P.set.ovAlpha*100)+'%';
+  $('#ovWhite').checked=!!P.set.ovWhite; $('#ovGray').checked=!!P.set.ovGray;
+  $('#ovBtn').setAttribute('aria-pressed', ovs().some(o=>o.vis && ovApplies(o)));
+}
+$('#ovBtn').onclick=e=>{ renderOvPop(); openPop('ovPop', e.currentTarget); };
+$('#ovAlpha').oninput=e=>{ P.set.ovAlpha=+e.target.value; $('#ovAlphaOut').textContent=Math.round(P.set.ovAlpha*100)+'%'; save(); requestDraw(); };
+$('#ovWhite').onchange=e=>{ P.set.ovWhite=e.target.checked; save(); requestDraw(); };
+$('#ovGray').onchange=e=>{ P.set.ovGray=e.target.checked; save(); requestDraw(); };
+$('#ovAdd').onclick=()=>{ closePops(); $$('#ovScope button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.s===(P.set.ovScope||'key')));
+  $('#ovFor').textContent=`${P.year}年　No.${pad2(P.sp+1)} ${P.species[P.sp].name}`; openSheet('sheetOv'); };
 
 /* ============ スタート画面 ============ */
 function showStart(){ $('#start').classList.remove('hidden'); closeSheet(); closePops(); renderStart(); }
