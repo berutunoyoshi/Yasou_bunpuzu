@@ -1,6 +1,6 @@
 // 野草分布図 オフライン用キャッシュ
 // アプリを更新したら VERSION を変えてください（スタート画面に「新しいバージョンがあります」と表示されます）
-const VERSION = 'v3.1';
+const VERSION = 'v3.2';
 const CACHE = 'yasou-' + VERSION;
 const FILES = ['./', 'index.html', 'base.png', 'seed.json', 'manifest.json', 'icon-180.png', 'icon-512.png'];
 self.addEventListener('install', e => {

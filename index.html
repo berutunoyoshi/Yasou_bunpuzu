@@ -359,6 +359,11 @@ table.list tr[data-i]{cursor:pointer}
     <div class="row"><button class="btn wide" id="expAll">全種の画像をまとめて保存（ZIP）</button></div>
     <div class="progress" id="expProg"><i></i></div>
     <p class="note">ZIPには全種のPNG画像と面積一覧（CSV）が入ります。ファイル名は「番号_種名_年度.png」です。</p>
+    <h3>CAD用データ（DXF）</h3>
+    <div class="seg" id="cadScope" style="width:100%"><button data-s="year" style="flex:1">この年度の全種</button><button data-s="one" style="flex:1">表示中の種だけ</button><button data-s="all" style="flex:1">全年度・全種</button></div>
+    <label class="switch"><span>各レイヤに凡例（文字と色見本）を入れる</span><input type="checkbox" id="cadLegend"></label>
+    <div class="row"><button class="btn wide" id="expCad">CAD用データ（DXF）を保存</button></div>
+    <p class="note">250508野草分布.dwg と同じ座標（mm）で、レイヤ「野草＋種名＋年度」ごとにハッチと輪郭線を書き出します。AutoCADで開くか、図面に「元の座標に貼り付け」で同じ位置に入ります。ブラシ・消しゴムを使った種は、塗られた形の輪郭を線にして書き出します。</p>
     <h3>面積</h3>
     <div class="row"><button class="btn wide" id="expCsv">面積一覧をCSVで保存（全年度）</button></div>
   </div>
@@ -477,9 +482,11 @@ table.list tr[data-i]{cursor:pointer}
 <script>
 'use strict';
 /* ============ バージョン ============ */
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 const APP_DATE = '2026年11月26日';
 const CHANGES = [
+  'CAD用データ（DXF）の書き出し：レイヤ「野草＋種名＋年度」、ハッチと輪郭線、凡例付き',
+  '前年から写す：消しゴムで消した後でも、同じ範囲をもう一度写せるように修正',
   '多角形ツール：タップした点をつないで範囲を作る',
   '頂点の編集：選んだ範囲の点をドラッグで移動、線をタップで点を追加、点の削除',
   '前年から写す：前年の範囲をタップまたは囲んで1つずつコピー',
@@ -851,12 +858,28 @@ function closePoly(){
 function polyUndo(){ if(polyDraft && polyDraft.pts.length){ polyDraft.pts.length-=2; if(!polyDraft.pts.length) polyDraft=null; renderCtx(); requestDraw(); } }
 /* 前年から写す */
 function refShapes(){ const ry=refYear(); return ry==null ? [] : shapesOf(keyOf(ry,P.sp)); }
+/* 写す範囲のうち、今年の範囲で覆われていない部分の割合 */
+const covA=newCanvas(1,1), covB=newCanvas(1,1);
+function uncoveredRatio(shape, cur){
+  const b=shapeBox(shape), w=b.x1-b.x0+6, h=b.y1-b.y0+6, f=Math.min(1, Math.sqrt(4e5/(w*h)));
+  for(const cv of [covA,covB]){ cv.width=Math.ceil(w*f); cv.height=Math.ceil(h*f); }
+  const a=covA.getContext('2d',{willReadFrequently:true}), bc=covB.getContext('2d');
+  a.setTransform(f,0,0,f,0,0); bc.setTransform(f,0,0,f,0,0);
+  renderShapes(a,[shape],'#000',-b.x0+3,-b.y0+3); renderShapes(bc,cur,'#000',-b.x0+3,-b.y0+3);
+  a.setTransform(1,0,0,1,0,0); const d0=a.getImageData(0,0,covA.width,covA.height).data; let tot=0; for(let i=3;i<d0.length;i+=4) if(d0[i]>=128) tot++;
+  a.globalCompositeOperation='destination-out'; a.drawImage(covB,0,0); a.globalCompositeOperation='source-over';
+  const d1=a.getImageData(0,0,covA.width,covA.height).data; let left=0; for(let i=3;i<d1.length;i+=4) if(d1[i]>=128) left++;
+  return tot ? left/tot : 0;
+}
 function copyShapes(list){
   if(!list.length) return toast('写す範囲がありません。前年の範囲（斜線）をタップするか囲んでください');
-  const k=curKey(), cur=shapesOf(k), have=new Set(cur.map(x=>JSON.stringify(x)));
-  const add=list.filter(x=>!x.e && !have.has(JSON.stringify(x))).map(x=>JSON.parse(JSON.stringify(x)));
-  if(!add.length) return toast('その範囲はすでに写してあります');
-  setShapes(k, cur.concat(add)); afterEdit(); toast(`${refYear()}年の範囲を${add.length}個写しました`);
+  const k=curKey(); let cur=shapesOf(k).slice(), n=0;
+  for(const x of list){ if(x.e) continue;
+    if(uncoveredRatio(x, cur) < 0.01) continue;           // すでに今年の範囲で覆われている
+    const js=JSON.stringify(x); cur=cur.filter(y=>JSON.stringify(y)!==js); // 同じ範囲が残っていれば入れ替える
+    cur.push(JSON.parse(js)); n++; }
+  if(!n) return toast('その範囲はすでに今年の範囲に含まれています');
+  setShapes(k, cur); afterEdit(); toast(`${refYear()}年の範囲を${n}個写しました`);
 }
 function noRefMsg(){ const ry=refYear(); return ry==null?'比べる年度がありません':`${ry}年のこの種には分布がありません`; }
 function copyByLasso(pts){
@@ -1235,6 +1258,7 @@ function renderExport(){
     b.onclick=()=>{ P.set.expYear=y; renderExportYears(); }; ey.appendChild(b); });
   $$('#legPos button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.p===P.set.legPos));
   $('#expArea').checked=!!P.set.expArea; $('#expPrev').checked=!!P.set.expPrev;
+  $$('#cadScope button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.s===(P.set.cadScope||'year'))); $('#cadLegend').checked=P.set.cadLegend!==false;
   $('#expOne').textContent=`「${P.species[P.sp].name}」${expYear()}年を画像で保存`;
   $('#expAll').textContent=`全${P.species.length}種の${expYear()}年の画像をまとめて保存（ZIP）`;
 }
@@ -1272,6 +1296,122 @@ function csvText(){
 }
 $('#expCsv').onclick=()=>saveBlob(new Blob([csvText()],{type:'text/csv'}), `野草面積一覧.csv`);
 $('#listCsv').onclick=()=>saveBlob(new Blob([csvText()],{type:'text/csv'}), `野草面積一覧.csv`);
+
+/* ============ CAD用データ（DXF）出力 ============ */
+const DXF_TPL = "  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1024\n  9\n$ACADMAINTVER\n 70\n6\n  9\n$DWGCODEPAGE\n  3\nANSI_932\n  9\n$LASTSAVEDBY\n  1\nezdxf\n  9\n$INSBASE\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$EXTMIN\n 10\n1e+20\n 20\n1e+20\n 30\n1e+20\n  9\n$EXTMAX\n 10\n-1e+20\n 20\n-1e+20\n 30\n-1e+20\n  9\n$LIMMIN\n 10\n0.0\n 20\n0.0\n  9\n$LIMMAX\n 10\n420.0\n 20\n297.0\n  9\n$ORTHOMODE\n 70\n0\n  9\n$REGENMODE\n 70\n1\n  9\n$FILLMODE\n 70\n1\n  9\n$QTEXTMODE\n 70\n0\n  9\n$MIRRTEXT\n 70\n1\n  9\n$LTSCALE\n 40\n1.0\n  9\n$ATTMODE\n 70\n1\n  9\n$TEXTSIZE\n 40\n2.5\n  9\n$TRACEWID\n 40\n1.0\n  9\n$TEXTSTYLE\n  7\nStandard\n  9\n$CLAYER\n  8\n0\n  9\n$CELTYPE\n  6\nByLayer\n  9\n$CECOLOR\n 62\n256\n  9\n$CELTSCALE\n 40\n1.0\n  9\n$DISPSILH\n 70\n0\n  9\n$DIMSCALE\n 40\n1.0\n  9\n$DIMASZ\n 40\n2.5\n  9\n$DIMEXO\n 40\n0.625\n  9\n$DIMDLI\n 40\n3.75\n  9\n$DIMRND\n 40\n0.0\n  9\n$DIMDLE\n 40\n0.0\n  9\n$DIMEXE\n 40\n1.25\n  9\n$DIMTP\n 40\n0.0\n  9\n$DIMTM\n 40\n0.0\n  9\n$DIMTXT\n 40\n2.5\n  9\n$DIMCEN\n 40\n2.5\n  9\n$DIMTSZ\n 40\n0.0\n  9\n$DIMTOL\n 70\n0\n  9\n$DIMLIM\n 70\n0\n  9\n$DIMTIH\n 70\n0\n  9\n$DIMTOH\n 70\n0\n  9\n$DIMSE1\n 70\n0\n  9\n$DIMSE2\n 70\n0\n  9\n$DIMTAD\n 70\n1\n  9\n$DIMZIN\n 70\n8\n  9\n$DIMBLK\n  1\n\n  9\n$DIMASO\n 70\n1\n  9\n$DIMSHO\n 70\n1\n  9\n$DIMPOST\n  1\n\n  9\n$DIMAPOST\n  1\n\n  9\n$DIMALT\n 70\n0\n  9\n$DIMALTD\n 70\n3\n  9\n$DIMALTF\n 40\n0.03937007874\n  9\n$DIMLFAC\n 40\n1.0\n  9\n$DIMTOFL\n 70\n1\n  9\n$DIMTVP\n 40\n0.0\n  9\n$DIMTIX\n 70\n0\n  9\n$DIMSOXD\n 70\n0\n  9\n$DIMSAH\n 70\n0\n  9\n$DIMBLK1\n  1\n\n  9\n$DIMBLK2\n  1\n\n  9\n$DIMSTYLE\n  2\nISO-25\n  9\n$DIMCLRD\n 70\n0\n  9\n$DIMCLRE\n 70\n0\n  9\n$DIMCLRT\n 70\n0\n  9\n$DIMTFAC\n 40\n1.0\n  9\n$DIMGAP\n 40\n0.625\n  9\n$DIMJUST\n 70\n0\n  9\n$DIMSD1\n 70\n0\n  9\n$DIMSD2\n 70\n0\n  9\n$DIMTOLJ\n 70\n0\n  9\n$DIMTZIN\n 70\n8\n  9\n$DIMALTZ\n 70\n0\n  9\n$DIMALTTZ\n 70\n0\n  9\n$DIMUPT\n 70\n0\n  9\n$DIMDEC\n 70\n2\n  9\n$DIMTDEC\n 70\n2\n  9\n$DIMALTU\n 70\n2\n  9\n$DIMALTTD\n 70\n3\n  9\n$DIMTXSTY\n  7\nStandard\n  9\n$DIMAUNIT\n 70\n0\n  9\n$DIMADEC\n 70\n0\n  9\n$DIMALTRND\n 40\n0.0\n  9\n$DIMAZIN\n 70\n0\n  9\n$DIMDSEP\n 70\n44\n  9\n$DIMATFIT\n 70\n3\n  9\n$DIMFRAC\n 70\n0\n  9\n$DIMLDRBLK\n  1\n\n  9\n$DIMLUNIT\n 70\n2\n  9\n$DIMLWD\n 70\n-2\n  9\n$DIMLWE\n 70\n-2\n  9\n$DIMTMOVE\n 70\n0\n  9\n$DIMFXL\n 40\n1.0\n  9\n$DIMFXLON\n 70\n0\n  9\n$DIMJOGANG\n 40\n0.785398163397\n  9\n$DIMTFILL\n 70\n0\n  9\n$DIMTFILLCLR\n 70\n0\n  9\n$DIMARCSYM\n 70\n0\n  9\n$DIMLTYPE\n  6\n\n  9\n$DIMLTEX1\n  6\n\n  9\n$DIMLTEX2\n  6\n\n  9\n$DIMTXTDIRECTION\n 70\n0\n  9\n$LUNITS\n 70\n2\n  9\n$LUPREC\n 70\n4\n  9\n$SKETCHINC\n 40\n1.0\n  9\n$FILLETRAD\n 40\n10.0\n  9\n$AUNITS\n 70\n0\n  9\n$AUPREC\n 70\n2\n  9\n$MENU\n  1\n.\n  9\n$ELEVATION\n 40\n0.0\n  9\n$PELEVATION\n 40\n0.0\n  9\n$THICKNESS\n 40\n0.0\n  9\n$LIMCHECK\n 70\n0\n  9\n$CHAMFERA\n 40\n0.0\n  9\n$CHAMFERB\n 40\n0.0\n  9\n$CHAMFERC\n 40\n0.0\n  9\n$CHAMFERD\n 40\n0.0\n  9\n$SKPOLY\n 70\n0\n  9\n$TDCREATE\n 40\n2461371.6083217594\n  9\n$TDUCREATE\n 40\n2458532.153996898\n  9\n$TDUPDATE\n 40\n2461371.6083217594\n  9\n$TDUUPDATE\n 40\n2458532.1544311\n  9\n$TDINDWG\n 40\n0.0\n  9\n$TDUSRTIMER\n 40\n0.0\n  9\n$USRTIMER\n 70\n1\n  9\n$ANGBASE\n 50\n0.0\n  9\n$ANGDIR\n 70\n0\n  9\n$PDMODE\n 70\n0\n  9\n$PDSIZE\n 40\n0.0\n  9\n$PLINEWID\n 40\n0.0\n  9\n$SPLFRAME\n 70\n0\n  9\n$SPLINETYPE\n 70\n6\n  9\n$SPLINESEGS\n 70\n8\n  9\n$HANDSEED\n  5\n%%HANDSEED%%\n  9\n$SURFTAB1\n 70\n6\n  9\n$SURFTAB2\n 70\n6\n  9\n$SURFTYPE\n 70\n6\n  9\n$SURFU\n 70\n6\n  9\n$SURFV\n 70\n6\n  9\n$UCSBASE\n  2\n\n  9\n$UCSNAME\n  2\n\n  9\n$UCSORG\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSXDIR\n 10\n1.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSYDIR\n 10\n0.0\n 20\n1.0\n 30\n0.0\n  9\n$UCSORTHOREF\n  2\n\n  9\n$UCSORTHOVIEW\n 70\n0\n  9\n$UCSORGTOP\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSORGBOTTOM\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSORGLEFT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSORGRIGHT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSORGFRONT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$UCSORGBACK\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSBASE\n  2\n\n  9\n$PUCSNAME\n  2\n\n  9\n$PUCSORG\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSXDIR\n 10\n1.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSYDIR\n 10\n0.0\n 20\n1.0\n 30\n0.0\n  9\n$PUCSORTHOREF\n  2\n\n  9\n$PUCSORTHOVIEW\n 70\n0\n  9\n$PUCSORGTOP\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSORGBOTTOM\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSORGLEFT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSORGRIGHT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSORGFRONT\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PUCSORGBACK\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$USERI1\n 70\n0\n  9\n$USERI2\n 70\n0\n  9\n$USERI3\n 70\n0\n  9\n$USERI4\n 70\n0\n  9\n$USERI5\n 70\n0\n  9\n$USERR1\n 40\n0.0\n  9\n$USERR2\n 40\n0.0\n  9\n$USERR3\n 40\n0.0\n  9\n$USERR4\n 40\n0.0\n  9\n$USERR5\n 40\n0.0\n  9\n$WORLDVIEW\n 70\n1\n  9\n$SHADEDGE\n 70\n3\n  9\n$SHADEDIF\n 70\n70\n  9\n$TILEMODE\n 70\n1\n  9\n$MAXACTVP\n 70\n64\n  9\n$PINSBASE\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  9\n$PLIMCHECK\n 70\n0\n  9\n$PEXTMIN\n 10\n1e+20\n 20\n1e+20\n 30\n1e+20\n  9\n$PEXTMAX\n 10\n-1e+20\n 20\n-1e+20\n 30\n-1e+20\n  9\n$PLIMMIN\n 10\n0.0\n 20\n0.0\n  9\n$PLIMMAX\n 10\n420.0\n 20\n297.0\n  9\n$UNITMODE\n 70\n0\n  9\n$VISRETAIN\n 70\n1\n  9\n$PLINEGEN\n 70\n0\n  9\n$PSLTSCALE\n 70\n1\n  9\n$TREEDEPTH\n 70\n3020\n  9\n$CMLSTYLE\n  2\nStandard\n  9\n$CMLJUST\n 70\n0\n  9\n$CMLSCALE\n 40\n20.0\n  9\n$PROXYGRAPHICS\n 70\n1\n  9\n$MEASUREMENT\n 70\n1\n  9\n$CELWEIGHT\n370\n-1\n  9\n$ENDCAPS\n280\n0\n  9\n$JOINSTYLE\n280\n0\n  9\n$LWDISPLAY\n290\n0\n  9\n$INSUNITS\n 70\n4\n  9\n$HYPERLINKBASE\n  1\n\n  9\n$STYLESHEET\n  1\n\n  9\n$XEDIT\n290\n1\n  9\n$CEPSNTYPE\n380\n0\n  9\n$PSTYLEMODE\n290\n1\n  9\n$FINGERPRINTGUID\n  2\n{EBF2005D-F9DA-4725-93E4-15BB969184EA}\n  9\n$VERSIONGUID\n  2\n{8BEB8877-90B9-4AC6-927D-6BE67CAC2CDB}\n  9\n$EXTNAMES\n290\n1\n  9\n$PSVPSCALE\n 40\n0.0\n  9\n$OLESTARTUP\n290\n0\n  9\n$SORTENTS\n280\n127\n  9\n$INDEXCTL\n280\n0\n  9\n$HIDETEXT\n280\n1\n  9\n$XCLIPFRAME\n280\n1\n  9\n$HALOGAP\n280\n0\n  9\n$OBSCOLOR\n 70\n257\n  9\n$OBSLTYPE\n280\n0\n  9\n$INTERSECTIONDISPLAY\n280\n0\n  9\n$INTERSECTIONCOLOR\n 70\n257\n  9\n$DIMASSOC\n280\n2\n  9\n$PROJECTNAME\n  1\n\n  9\n$CAMERADISPLAY\n290\n0\n  9\n$LENSLENGTH\n 40\n50.0\n  9\n$CAMERAHEIGHT\n 40\n0.0\n  9\n$STEPSPERSEC\n 40\n24.0\n  9\n$STEPSIZE\n 40\n100.0\n  9\n$3DDWFPREC\n 40\n2.0\n  9\n$PSOLWIDTH\n 40\n0.005\n  9\n$PSOLHEIGHT\n 40\n0.08\n  9\n$LOFTANG1\n 40\n1.570796326795\n  9\n$LOFTANG2\n 40\n1.570796326795\n  9\n$LOFTMAG1\n 40\n0.0\n  9\n$LOFTMAG2\n 40\n0.0\n  9\n$LOFTPARAM\n 70\n7\n  9\n$LOFTNORMALS\n280\n1\n  9\n$LATITUDE\n 40\n37.795\n  9\n$LONGITUDE\n 40\n-122.394\n  9\n$NORTHDIRECTION\n 40\n0.0\n  9\n$TIMEZONE\n 70\n-8000\n  9\n$LIGHTGLYPHDISPLAY\n280\n1\n  9\n$TILEMODELIGHTSYNCH\n280\n1\n  9\n$CMATERIAL\n347\n20\n  9\n$SOLIDHIST\n280\n0\n  9\n$SHOWHIST\n280\n1\n  9\n$DWFFRAME\n280\n2\n  9\n$DGNFRAME\n280\n2\n  9\n$REALWORLDSCALE\n290\n1\n  9\n$INTERFERECOLOR\n 62\n256\n  9\n$CSHADOW\n280\n0\n  9\n$SHADOWPLANELOCATION\n 40\n0.0\n  0\nENDSEC\n  0\nSECTION\n  2\nCLASSES\n  0\nCLASS\n  1\nACDBDICTIONARYWDFLT\n  2\nAcDbDictionaryWithDefault\n  3\nObjectDBX Classes\n 90\n0\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nSUN\n  2\nAcDbSun\n  3\nSCENEOE\n 90\n1153\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nVISUALSTYLE\n  2\nAcDbVisualStyle\n  3\nObjectDBX Classes\n 90\n4095\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nMATERIAL\n  2\nAcDbMaterial\n  3\nObjectDBX Classes\n 90\n1153\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nSCALE\n  2\nAcDbScale\n  3\nObjectDBX Classes\n 90\n1153\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nTABLESTYLE\n  2\nAcDbTableStyle\n  3\nObjectDBX Classes\n 90\n4095\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nMLEADERSTYLE\n  2\nAcDbMLeaderStyle\n  3\nACDB_MLEADERSTYLE_CLASS\n 90\n4095\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nDICTIONARYVAR\n  2\nAcDbDictionaryVar\n  3\nObjectDBX Classes\n 90\n0\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nCELLSTYLEMAP\n  2\nAcDbCellStyleMap\n  3\nObjectDBX Classes\n 90\n1152\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nMENTALRAYRENDERSETTINGS\n  2\nAcDbMentalRayRenderSettings\n  3\nSCENEOE\n 90\n1024\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nACDBDETAILVIEWSTYLE\n  2\nAcDbDetailViewStyle\n  3\nObjectDBX Classes\n 90\n1025\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nACDBSECTIONVIEWSTYLE\n  2\nAcDbSectionViewStyle\n  3\nObjectDBX Classes\n 90\n1025\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nRASTERVARIABLES\n  2\nAcDbRasterVariables\n  3\nISM\n 90\n0\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nLAYOUT\n  2\nAcDbLayout\n  3\nObjectDBX Classes\n 90\n0\n 91\n0\n280\n0\n281\n0\n  0\nCLASS\n  1\nACDBPLACEHOLDER\n  2\nAcDbPlaceHolder\n  3\nObjectDBX Classes\n 90\n0\n 91\n0\n280\n0\n281\n0\n  0\nENDSEC\n  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nVPORT\n  5\n8\n330\n0\n100\nAcDbSymbolTable\n 70\n1\n  0\nVPORT\n  5\n23\n330\n8\n100\nAcDbSymbolTableRecord\n100\nAcDbViewportTableRecord\n  2\n*Active\n 70\n0\n 10\n0.0\n 20\n0.0\n 11\n1.0\n 21\n1.0\n 12\n0.0\n 22\n0.0\n 13\n0.0\n 23\n0.0\n 14\n0.5\n 24\n0.5\n 15\n0.5\n 25\n0.5\n 16\n0.0\n 26\n0.0\n 36\n1.0\n 17\n0.0\n 27\n0.0\n 37\n0.0\n 40\n1000.0\n 41\n1.34\n 42\n50.0\n 43\n0.0\n 44\n0.0\n 50\n0.0\n 51\n0.0\n 71\n0\n 72\n1000\n 73\n1\n 74\n3\n 75\n0\n 76\n0\n 77\n0\n 78\n0\n281\n0\n 65\n0\n146\n0.0\n  0\nENDTAB\n  0\nTABLE\n  2\nLTYPE\n  5\n2\n330\n0\n100\nAcDbSymbolTable\n 70\n3\n  0\nLTYPE\n  5\n24\n330\n2\n100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n  2\nByBlock\n 70\n0\n  3\n\n 72\n65\n 73\n0\n 40\n0.0\n  0\nLTYPE\n  5\n25\n330\n2\n100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n  2\nByLayer\n 70\n0\n  3\n\n 72\n65\n 73\n0\n 40\n0.0\n  0\nLTYPE\n  5\n26\n330\n2\n100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n  2\nContinuous\n 70\n0\n  3\n\n 72\n65\n 73\n0\n 40\n0.0\n  0\nENDTAB\n  0\nTABLE\n  2\nLAYER\n  5\n1\n330\n0\n100\nAcDbSymbolTable\n 70\n%%LAYERCOUNT%%\n  0\nLAYER\n  5\n27\n330\n1\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n  2\n0\n 70\n0\n 62\n7\n  6\nContinuous\n370\n-3\n390\n13\n347\n21\n  0\nLAYER\n  5\n28\n330\n1\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n  2\nDefpoints\n 70\n0\n 62\n7\n  6\nContinuous\n290\n0\n370\n-3\n390\n13\n347\n21\n%%LAYERS%%  0\nENDTAB\n  0\nTABLE\n  2\nSTYLE\n  5\n5\n330\n0\n100\nAcDbSymbolTable\n 70\n1\n  0\nSTYLE\n  5\n29\n330\n5\n100\nAcDbSymbolTableRecord\n100\nAcDbTextStyleTableRecord\n  2\nStandard\n 70\n0\n 40\n0.0\n 41\n1.0\n 50\n0.0\n 71\n0\n 42\n2.5\n  3\ntxt\n  4\n\n  0\nENDTAB\n  0\nTABLE\n  2\nVIEW\n  5\n7\n330\n0\n100\nAcDbSymbolTable\n 70\n0\n  0\nENDTAB\n  0\nTABLE\n  2\nUCS\n  5\n6\n330\n0\n100\nAcDbSymbolTable\n 70\n0\n  0\nENDTAB\n  0\nTABLE\n  2\nAPPID\n  5\n3\n330\n0\n100\nAcDbSymbolTable\n 70\n3\n  0\nAPPID\n  5\n2A\n330\n3\n100\nAcDbSymbolTableRecord\n100\nAcDbRegAppTableRecord\n  2\nACAD\n 70\n0\n  0\nAPPID\n  5\n2F\n330\n3\n100\nAcDbSymbolTableRecord\n100\nAcDbRegAppTableRecord\n  2\nHATCHBACKGROUNDCOLOR\n 70\n0\n  0\nAPPID\n  5\n30\n330\n3\n100\nAcDbSymbolTableRecord\n100\nAcDbRegAppTableRecord\n  2\nEZDXF\n 70\n0\n  0\nENDTAB\n  0\nTABLE\n  2\nDIMSTYLE\n  5\n4\n330\n0\n100\nAcDbSymbolTable\n 70\n1\n100\nAcDbDimStyleTable\n  0\nDIMSTYLE\n105\n2B\n330\n4\n100\nAcDbSymbolTableRecord\n100\nAcDbDimStyleTableRecord\n  2\nStandard\n 70\n0\n 40\n1.0\n 41\n2.5\n 42\n0.625\n 43\n3.75\n 44\n1.25\n 45\n0.0\n 46\n0.0\n 47\n0.0\n 48\n0.0\n 49\n2.5\n140\n2.5\n141\n2.5\n142\n0.0\n143\n0.03937007874\n144\n1.0\n145\n0.0\n146\n1.0\n147\n0.625\n148\n0.0\n 69\n0\n 70\n0\n 71\n0\n 72\n0\n 73\n0\n 74\n0\n 75\n0\n 76\n0\n 77\n1\n 78\n8\n 79\n3\n170\n0\n171\n3\n172\n1\n173\n0\n174\n0\n175\n0\n176\n0\n177\n0\n178\n0\n179\n2\n271\n2\n272\n2\n273\n2\n274\n3\n275\n0\n276\n0\n277\n2\n278\n44\n279\n0\n280\n0\n281\n0\n282\n0\n283\n0\n284\n8\n285\n0\n286\n0\n288\n0\n289\n3\n290\n0\n371\n-2\n372\n-2\n  0\nENDTAB\n  0\nTABLE\n  2\nBLOCK_RECORD\n  5\n9\n330\n0\n100\nAcDbSymbolTable\n 70\n2\n  0\nBLOCK_RECORD\n  5\n17\n330\n9\n100\nAcDbSymbolTableRecord\n100\nAcDbBlockTableRecord\n  2\n*Model_Space\n340\n1A\n 70\n0\n280\n1\n281\n0\n  0\nBLOCK_RECORD\n  5\n1B\n330\n9\n100\nAcDbSymbolTableRecord\n100\nAcDbBlockTableRecord\n  2\n*Paper_Space\n340\n1E\n 70\n0\n280\n1\n281\n0\n  0\nENDTAB\n  0\nENDSEC\n  0\nSECTION\n  2\nBLOCKS\n  0\nBLOCK\n  5\n18\n330\n17\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockBegin\n  2\n*Model_Space\n 70\n0\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  3\n*Model_Space\n  1\n\n  0\nENDBLK\n  5\n19\n330\n17\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockEnd\n  0\nBLOCK\n  5\n1C\n330\n1B\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockBegin\n  2\n*Paper_Space\n 70\n0\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  3\n*Paper_Space\n  1\n\n  0\nENDBLK\n  5\n1D\n330\n1B\n100\nAcDbEntity\n  8\n0\n100\nAcDbBlockEnd\n  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES\n%%ENTITIES%%  0\nENDSEC\n  0\nSECTION\n  2\nOBJECTS\n  0\nDICTIONARY\n  5\nA\n330\n0\n100\nAcDbDictionary\n281\n1\n  3\nACAD_COLOR\n350\nB\n  3\nACAD_GROUP\n350\nC\n  3\nACAD_LAYOUT\n350\nD\n  3\nACAD_MATERIAL\n350\nE\n  3\nACAD_MLEADERSTYLE\n350\nF\n  3\nACAD_MLINESTYLE\n350\n10\n  3\nACAD_PLOTSETTINGS\n350\n11\n  3\nACAD_PLOTSTYLENAME\n350\n12\n  3\nACAD_SCALELIST\n350\n14\n  3\nACAD_TABLESTYLE\n350\n15\n  3\nACAD_VISUALSTYLE\n350\n16\n  3\nEZDXF_META\n350\n2D\n  0\nDICTIONARY\n  5\nB\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nDICTIONARY\n  5\nC\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nDICTIONARY\n  5\nD\n330\nA\n100\nAcDbDictionary\n281\n1\n  3\nModel\n350\n1A\n  3\nLayout1\n350\n1E\n  0\nDICTIONARY\n  5\nE\n330\nA\n100\nAcDbDictionary\n281\n1\n  3\nByBlock\n350\n1F\n  3\nByLayer\n350\n20\n  3\nGlobal\n350\n21\n  0\nDICTIONARY\n  5\nF\n330\nA\n100\nAcDbDictionary\n281\n1\n  3\nStandard\n350\n2C\n  0\nDICTIONARY\n  5\n10\n330\nA\n100\nAcDbDictionary\n281\n1\n  3\nStandard\n350\n22\n  0\nDICTIONARY\n  5\n11\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nACDBDICTIONARYWDFLT\n  5\n12\n330\nA\n100\nAcDbDictionary\n281\n1\n  3\nNormal\n350\n13\n100\nAcDbDictionaryWithDefault\n340\n13\n  0\nACDBPLACEHOLDER\n  5\n13\n330\n12\n  0\nDICTIONARY\n  5\n14\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nDICTIONARY\n  5\n15\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nDICTIONARY\n  5\n16\n330\nA\n100\nAcDbDictionary\n281\n1\n  0\nLAYOUT\n  5\n1A\n330\nD\n100\nAcDbPlotSettings\n  1\n\n  4\nA3\n  6\n\n 40\n7.5\n 41\n20.0\n 42\n7.5\n 43\n20.0\n 44\n420.0\n 45\n297.0\n 46\n0.0\n 47\n0.0\n 48\n0.0\n 49\n0.0\n140\n0.0\n141\n0.0\n142\n1.0\n143\n1.0\n 70\n1024\n 72\n1\n 73\n0\n 74\n5\n  7\n\n 75\n16\n 76\n0\n 77\n2\n 78\n300\n147\n1.0\n148\n0.0\n149\n0.0\n100\nAcDbLayout\n  1\nModel\n 70\n1\n 71\n0\n 10\n0.0\n 20\n0.0\n 11\n420.0\n 21\n297.0\n 12\n0.0\n 22\n0.0\n 32\n0.0\n 14\n1e+20\n 24\n1e+20\n 34\n1e+20\n 15\n-1e+20\n 25\n-1e+20\n 35\n-1e+20\n146\n0.0\n 13\n0.0\n 23\n0.0\n 33\n0.0\n 16\n1.0\n 26\n0.0\n 36\n0.0\n 17\n0.0\n 27\n1.0\n 37\n0.0\n 76\n1\n330\n17\n  0\nLAYOUT\n  5\n1E\n330\nD\n100\nAcDbPlotSettings\n  1\n\n  4\nA3\n  6\n\n 40\n7.5\n 41\n20.0\n 42\n7.5\n 43\n20.0\n 44\n420.0\n 45\n297.0\n 46\n0.0\n 47\n0.0\n 48\n0.0\n 49\n0.0\n140\n0.0\n141\n0.0\n142\n1.0\n143\n1.0\n 70\n0\n 72\n1\n 73\n0\n 74\n5\n  7\n\n 75\n16\n 76\n0\n 77\n2\n 78\n300\n147\n1.0\n148\n0.0\n149\n0.0\n100\nAcDbLayout\n  1\nLayout1\n 70\n1\n 71\n1\n 10\n0.0\n 20\n0.0\n 11\n420.0\n 21\n297.0\n 12\n0.0\n 22\n0.0\n 32\n0.0\n 14\n1e+20\n 24\n1e+20\n 34\n1e+20\n 15\n-1e+20\n 25\n-1e+20\n 35\n-1e+20\n146\n0.0\n 13\n0.0\n 23\n0.0\n 33\n0.0\n 16\n1.0\n 26\n0.0\n 36\n0.0\n 17\n0.0\n 27\n1.0\n 37\n0.0\n 76\n1\n330\n1B\n  0\nMATERIAL\n  5\n1F\n102\n{ACAD_REACTORS\n330\nE\n102\n}\n330\nE\n100\nAcDbMaterial\n  1\nByBlock\n  2\n\n 70\n0\n 40\n1.0\n 71\n1\n 41\n1.0\n 91\n-1023410177\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 44\n0.5\n 73\n0\n 45\n1.0\n 46\n1.0\n 77\n1\n  4\n\n 78\n1\n 79\n1\n170\n1\n 48\n1.0\n171\n1\n  6\n\n172\n1\n173\n1\n174\n1\n140\n1.0\n141\n1.0\n175\n1\n  7\n\n176\n1\n177\n1\n178\n1\n143\n1.0\n179\n1\n  8\n\n270\n1\n271\n1\n272\n1\n145\n1.0\n146\n1.0\n273\n1\n  9\n\n274\n1\n275\n1\n276\n1\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 94\n63\n  0\nMATERIAL\n  5\n20\n102\n{ACAD_REACTORS\n330\nE\n102\n}\n330\nE\n100\nAcDbMaterial\n  1\nByLayer\n  2\n\n 70\n0\n 40\n1.0\n 71\n1\n 41\n1.0\n 91\n-1023410177\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 44\n0.5\n 73\n0\n 45\n1.0\n 46\n1.0\n 77\n1\n  4\n\n 78\n1\n 79\n1\n170\n1\n 48\n1.0\n171\n1\n  6\n\n172\n1\n173\n1\n174\n1\n140\n1.0\n141\n1.0\n175\n1\n  7\n\n176\n1\n177\n1\n178\n1\n143\n1.0\n179\n1\n  8\n\n270\n1\n271\n1\n272\n1\n145\n1.0\n146\n1.0\n273\n1\n  9\n\n274\n1\n275\n1\n276\n1\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 94\n63\n  0\nMATERIAL\n  5\n21\n102\n{ACAD_REACTORS\n330\nE\n102\n}\n330\nE\n100\nAcDbMaterial\n  1\nGlobal\n  2\n\n 70\n0\n 40\n1.0\n 71\n1\n 41\n1.0\n 91\n-1023410177\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 44\n0.5\n 73\n0\n 45\n1.0\n 46\n1.0\n 77\n1\n  4\n\n 78\n1\n 79\n1\n170\n1\n 48\n1.0\n171\n1\n  6\n\n172\n1\n173\n1\n174\n1\n140\n1.0\n141\n1.0\n175\n1\n  7\n\n176\n1\n177\n1\n178\n1\n143\n1.0\n179\n1\n  8\n\n270\n1\n271\n1\n272\n1\n145\n1.0\n146\n1.0\n273\n1\n  9\n\n274\n1\n275\n1\n276\n1\n 42\n1.0\n 72\n1\n  3\n\n 73\n1\n 74\n1\n 75\n1\n 94\n63\n  0\nMLINESTYLE\n  5\n22\n102\n{ACAD_REACTORS\n330\n10\n102\n}\n330\n10\n100\nAcDbMlineStyle\n  2\nStandard\n 70\n0\n  3\n\n 62\n256\n 51\n90.0\n 52\n90.0\n 71\n2\n 49\n0.5\n 62\n256\n  6\nBYLAYER\n 49\n-0.5\n 62\n256\n  6\nBYLAYER\n  0\nMLEADERSTYLE\n  5\n2C\n102\n{ACAD_REACTORS\n330\nF\n102\n}\n330\nF\n100\nAcDbMLeaderStyle\n179\n2\n170\n2\n171\n1\n172\n0\n 90\n2\n 40\n0.0\n 41\n0.0\n173\n1\n 91\n-1056964608\n 92\n-2\n290\n1\n 42\n2.0\n291\n1\n 43\n8.0\n  3\nStandard\n 44\n4.0\n300\n\n342\n29\n174\n1\n175\n1\n176\n0\n178\n1\n 93\n-1056964608\n 45\n4.0\n292\n0\n297\n0\n 46\n4.0\n 94\n-1056964608\n 47\n1.0\n 49\n1.0\n140\n1.0\n294\n1\n141\n0.0\n177\n0\n142\n1.0\n295\n0\n296\n0\n143\n3.75\n271\n0\n272\n9\n273\n9\n  0\nDICTIONARY\n  5\n2D\n330\nA\n100\nAcDbDictionary\n280\n1\n281\n1\n  3\nCREATED_BY_EZDXF\n350\n2E\n  3\nWRITTEN_BY_EZDXF\n350\n31\n  0\nDICTIONARYVAR\n  5\n2E\n330\n2D\n100\nDictionaryVariables\n280\n0\n  1\n1.4.5 @ 2026-11-26T14:35:59.718661+00:00\n  0\nDICTIONARYVAR\n  5\n31\n330\n2D\n100\nDictionaryVariables\n280\n0\n  1\n1.4.5 @ 2026-11-26T14:35:59.719488+00:00\n  0\nENDSEC\n  0\nEOF\n";
+const CADH = {ms:'17', layerTable:'1', plot:'13', mat:'21', seed:0x32};
+const LEG_CAD = {x:64055.52, y:33372.26, h:450,
+  swatch:[[62577.33,31160.89],[63150.27,30985.28],[63669.74,31031.09],[63814.88,31443.39],[63394.73,31748.80],[62707.20,31718.26],[62546.78,31527.38]]};
+function img2cad(x,y){ const S=250/25.4*(W/2924); return [55142.8199+(x/S-144.3190031)*225, 44200.4944+((209.88-y/S)-101.0781589)*225]; }
+const ACI = (()=>{ const t=[[0,0,0],[255,0,0],[255,255,0],[0,255,0],[0,255,255],[0,0,255],[255,0,255],[255,255,255],[128,128,128],[192,192,192]];
+  const V=[1,1,.65,.65,.5,.5,.3,.3,.15,.15];
+  for(let i=10;i<250;i++){ const h=((Math.floor(i/10)-1)*15)/60, v=V[i%10], s=(i%2)?0.5:1;
+    const f=k=>{ const kk=(k+h)%6; return v*(1-s*Math.max(0,Math.min(kk,4-kk,1))); };
+    t.push([Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)]); }
+  for(let i=250;i<256;i++){ const g=Math.round(51+(i-250)*40.8); t.push([g,g,g]); }
+  return t; })();
+function nearestAci(hex){ const n=parseInt(hex.slice(1),16), r=n>>16, g=(n>>8)&255, b=n&255; let best=1, bd=1e9;
+  for(let i=1;i<256;i++){ if(i===7) continue; const c=ACI[i], d=(c[0]-r)**2+(c[1]-g)**2+(c[2]-b)**2; if(d<bd){bd=d;best=i;} } return best; }
+const cadLayerName = (spIdx,y) => ('野草'+P.species[spIdx].name+y).replace(/[<>\/\\":;?*|=`,]/g,'_');
+const fnum = v => String(Math.round(v*1000)/1000);
+class DxfOut{
+  constructor(){ this.h=CADH.seed; this.ents=[]; this.layers=[]; }
+  hd(){ return (this.h++).toString(16).toUpperCase(); }
+  g(a){ let s=''; for(let i=0;i<a.length;i+=2) s+=String(a[i]).padStart(3)+'\n'+a[i+1]+'\n'; return s; }
+  layer(name, hex){ const n=parseInt(hex.slice(1),16);
+    this.layers.push(this.g([0,'LAYER',5,this.hd(),330,CADH.layerTable,100,'AcDbSymbolTableRecord',100,'AcDbLayerTableRecord',2,name,70,0,62,nearestAci(hex),420,n,6,'Continuous',370,-3,390,CADH.plot,347,CADH.mat])); }
+  head(type, layer, extra=[]){ return [0,type,5,this.hd(),330,CADH.ms,100,'AcDbEntity',8,layer,...extra]; }
+  poly(layer, pts){ const a=this.head('LWPOLYLINE',layer).concat([100,'AcDbPolyline',90,pts.length,70,1,43,0]);
+    for(const p of pts) a.push(10,fnum(p[0]),20,fnum(p[1])); this.ents.push(this.g(a)); }
+  hatch(layer, loops, opacity){ // loops: [{pts, bulge}]
+    const a=this.head('HATCH',layer,[440, 0x02000000 + opacity]).concat([100,'AcDbHatch',10,0,20,0,30,0,210,0,220,0,230,1,2,'SOLID',70,1,71,0,91,loops.length]);
+    loops.forEach((l,i)=>{ a.push(92, i===0?3:2, 72, l.bulge?1:0, 73, 1, 93, l.pts.length);
+      l.pts.forEach((p,j)=>{ a.push(10,fnum(p[0]),20,fnum(p[1])); if(l.bulge) a.push(42,l.bulge[j]); }); a.push(97,0); });
+    a.push(75,0,76,1,98,0); this.ents.push(this.g(a)); }
+  circle(layer,x,y,r){ this.ents.push(this.g(this.head('CIRCLE',layer).concat([100,'AcDbCircle',10,fnum(x),20,fnum(y),30,0,40,fnum(r)]))); }
+  mtext(layer,x,y,h,text){ this.ents.push(this.g(this.head('MTEXT',layer).concat([100,'AcDbMText',10,fnum(x),20,fnum(y),30,0,40,h,41,0,71,1,72,5,1,text,7,'Standard']))); }
+  build(){ return DXF_TPL.replace('%%HANDSEED%%', this.h.toString(16).toUpperCase()).replace('%%LAYERCOUNT%%', String(2+this.layers.length))
+      .replace('%%LAYERS%%', this.layers.join('')).replace('%%ENTITIES%%', this.ents.join('')); }
+}
+/* 塗った形の輪郭を取り出す（ブラシ・消しゴムを含む種の場合） */
+function traceShapes(shapes){
+  const bb=bbox(shapes); if(!bb) return [];
+  const f=Math.min(2, Math.sqrt(16e6/(bb.w*bb.h)));
+  const cw=Math.ceil(bb.w*f), ch=Math.ceil(bb.h*f), cv=newCanvas(cw,ch), c=cv.getContext('2d',{willReadFrequently:true});
+  c.setTransform(f,0,0,f,0,0); renderShapes(c, shapes, '#000', -bb.x, -bb.y);
+  const d=c.getImageData(0,0,cw,ch).data, w=cw+2, h=ch+2, B=new Uint8Array(w*h);
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++) if(d[(y*cw+x)*4+3]>=128) B[(y+1)*w+x+1]=1;
+  const W2=2*w+3, segA=[], segB=[], at=new Map();
+  const add=(x1,y1,x2,y2)=>{ const a=x1*W2+y1, b=x2*W2+y2, id=segA.length; segA.push(a); segB.push(b);
+    (at.get(a)||at.set(a,[]).get(a)).push(id); (at.get(b)||at.set(b,[]).get(b)).push(id); };
+  for(let j=0;j<h-1;j++) for(let i=0;i<w-1;i++){
+    const tl=B[j*w+i], tr=B[j*w+i+1], br=B[(j+1)*w+i+1], bl=B[(j+1)*w+i], code=tl*8+tr*4+br*2+bl; if(code===0||code===15) continue;
+    const T=[2*i+1,2*j], R=[2*i+2,2*j+1], Bo=[2*i+1,2*j+2], L=[2*i,2*j+1];
+    const S=(p,q)=>add(p[0],p[1],q[0],q[1]);
+    switch(code){ case 1: case 14: S(L,Bo); break; case 2: case 13: S(Bo,R); break; case 3: case 12: S(L,R); break;
+      case 4: case 11: S(T,R); break; case 6: case 9: S(T,Bo); break; case 7: case 8: S(L,T); break;
+      case 5: S(T,R); S(L,Bo); break; case 10: S(L,T); S(Bo,R); break; }
+  }
+  const used=new Uint8Array(segA.length), loops=[];
+  for(let s0=0;s0<segA.length;s0++){ if(used[s0]) continue; used[s0]=1; const start=segA[s0]; let cur=segB[s0]; const pts=[start,cur];
+    for(let guard=0; guard<segA.length && cur!==start; guard++){ const nx=(at.get(cur)||[]).find(id=>!used[id]); if(nx==null) break; used[nx]=1; cur= segA[nx]===cur? segB[nx] : segA[nx]; pts.push(cur); }
+    if(pts.length<4) continue; pts.pop();
+    const flat=[]; for(const k of pts){ const X=Math.floor(k/W2), Y=k%W2; flat.push(bb.x+((X/2-1)+0.5)/f, bb.y+((Y/2-1)+0.5)/f); }
+    const sp=simplifyClosed(flat, 0.35); if(sp.length>=6) loops.push(sp);
+  }
+  // 入れ子の判定（外形と穴）
+  const area=p=>{ let a=0; for(let i=0;i<p.length;i+=2){ const j=(i+2)%p.length; a+=p[i]*p[j+1]-p[j]*p[i+1]; } return Math.abs(a)/2; };
+  const inside=(x,y,p)=>{ let r=false; for(let i=0,j=p.length-2;i<p.length;j=i,i+=2){ const xi=p[i],yi=p[i+1],xj=p[j],yj=p[j+1];
+    if(((yi>y)!==(yj>y)) && x<(xj-xi)*(y-yi)/(yj-yi)+xi) r=!r; } return r; };
+  const info=loops.map(p=>({p, a:area(p)})).filter(o=>o.a>0.5);
+  info.forEach(o=>{ o.parents=info.filter(q=>q!==o && q.a>o.a && inside(o.p[0]+1e-3,o.p[1]+1e-3,q.p)); o.depth=o.parents.length; });
+  const outers=info.filter(o=>o.depth%2===0).map(o=>({o, rings:[o.p]}));
+  info.filter(o=>o.depth%2===1).forEach(hl=>{ const par=hl.parents.filter(q=>q.depth===hl.depth-1).sort((a,b)=>a.a-b.a)[0];
+    const t=outers.find(x=>x.o===par); if(t) t.rings.push(hl.p); });
+  return outers.map(x=>({rings:x.rings}));
+}
+function cadItems(spIdx, y){
+  const sh=shapesOf(keyOf(y,spIdx)); if(!sh.length) return [];
+  const simple=sh.every(s=>!s.e && (s.t!=='s' || s.p.length<=2));
+  if(!simple) return traceShapes(sh);
+  return sh.map(s=> s.t==='s' ? {dot:[s.p[0],s.p[1],s.w/2]} : {rings:ringsOf(s)});
+}
+function buildCadDxf(pairs, withLegend){
+  const D=new DxfOut(), S=250/25.4*(W/2924), op=Math.max(1,Math.min(255,Math.round(P.set.alpha*255)));
+  let nItems=0;
+  for(const [spIdx,y] of pairs){
+    const items=cadItems(spIdx,y); if(!items.length) continue;
+    const L=cadLayerName(spIdx,y); D.layer(L, yearColor(y));
+    for(const it of items){
+      if(it.dot){ const [cx,cy]=img2cad(it.dot[0],it.dot[1]), r=it.dot[2]/S*225; D.circle(L,cx,cy,r);
+        D.hatch(L,[{pts:[[cx-r,cy],[cx+r,cy]], bulge:[1,1]}], op); }
+      else { const rings=it.rings.map(r=>{ const a=[]; for(let i=0;i<r.length;i+=2) a.push(img2cad(r[i],r[i+1])); return a; });
+        rings.forEach(r=>D.poly(L,r)); D.hatch(L, rings.map(r=>({pts:r})), op); }
+      nItems++;
+    }
+    if(withLegend){ const lab=yearLabel(y,spIdx);
+      D.mtext(L, LEG_CAD.x, LEG_CAD.y, LEG_CAD.h, `{\\fMS PGothic|b0|i0|c128|p50;凡例\\P\\P\\fMS PGothic|b0|i0|c0|p50;●\\fMS PGothic|b0|i0|c128|p50;：${P.species[spIdx].name}${lab?`（${lab}）`:''}}`);
+      D.poly(L, LEG_CAD.swatch); D.hatch(L, [{pts:LEG_CAD.swatch}], op); }
+  }
+  return {text:D.build(), layers:D.layers.length, items:nItems};
+}
+$$('#cadScope button').forEach(b=>b.onclick=()=>{ P.set.cadScope=b.dataset.s; save(); $$('#cadScope button').forEach(x=>x.setAttribute('aria-pressed', x===b)); });
+$('#cadLegend').onchange=e=>{ P.set.cadLegend=e.target.checked; save(); };
+$('#expCad').onclick=async()=>{
+  const btn=$('#expCad'); btn.disabled=true; btn.textContent='作成中…'; await new Promise(r=>setTimeout(r,30));
+  try{
+    const y=expYear(), sc=P.set.cadScope||'year', pairs=[];
+    if(sc==='one') pairs.push([P.sp,y]);
+    else if(sc==='year') P.species.forEach((_,i)=>pairs.push([i,y]));
+    else sortedYears().forEach(yy=>P.species.forEach((_,i)=>pairs.push([i,yy])));
+    const r=buildCadDxf(pairs, P.set.cadLegend!==false);
+    if(!r.layers) throw new Error('書き出す分布がありません');
+    const name = sc==='one' ? `野草分布_${pad2(P.sp+1)}_${fileSafe(P.species[P.sp].name)}_${y}.dxf` : sc==='year' ? `野草分布_${y}.dxf` : `野草分布_全年度.dxf`;
+    saveBlob(new Blob([r.text],{type:'application/dxf'}), name);
+    toast(`DXFを保存しました（レイヤ ${r.layers}件、範囲 ${r.items}個）`, 3500);
+  }catch(e){ toast(e.message, 4000); }
+  finally{ btn.disabled=false; btn.textContent='CAD用データ（DXF）を保存'; }
+};
 
 /* ============ 図面上の点を指定するモード ============ */
 function setBanner(t, go){ $('#bannerText').textContent=t; $('#banner').classList.add('on'); $('#bannerGo').classList.toggle('hidden', !go); }
