@@ -225,6 +225,26 @@ table.list tr[data-i]{cursor:pointer}
 .kbd{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:12px;background:var(--panel)}
 .help li{margin:6px 0;line-height:1.6}
 .ovrow{border-bottom:1px solid var(--line);margin-bottom:6px}
+.startBtn.alt{margin-top:10px;background:var(--surface);color:var(--ink);border:2px solid var(--moss);font-size:20px}
+.maptitle{display:none;height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--moss-soft);font-size:16px;font-weight:700;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-mode .maptitle{display:block}
+.map-mode #yearBar,.map-mode #openList,.map-mode #doneBtn,.map-mode #refBtn,.map-mode [data-tool=copy]{display:none!important}
+.map-mode #badge .yr{min-width:84px}
+.mapcard{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.mapinfo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mapinfo b{font-size:17px}
+.mapinfo small{color:var(--sub);display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.mapinfo i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.addform{border:1px solid var(--line);border-radius:12px;padding:6px 14px;margin:8px 0;background:var(--panel)}
+.item{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:8px 0}
+.item.cur{border-color:var(--moss);box-shadow:inset 0 0 0 1px var(--moss)}
+.ihead{display:flex;align-items:center;gap:12px}
+.isw{width:44px;height:28px;border-radius:5px;flex:none}
+.iname{flex:1;display:flex;flex-direction:column;align-items:flex-start;border:0;background:transparent;text-align:left;min-height:44px;justify-content:center}
+.iname b{font-size:16px}.iname small{color:var(--sub);font-size:12px}
+.ivis{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--sub)}
+.ivis input{width:22px;height:22px;accent-color:var(--moss)}
+.item details{border:0;padding:0;margin:4px 0 0}
 #ovPop{max-height:calc(100% - 24px);overflow:auto}
 </style>
 </head>
@@ -241,7 +261,8 @@ table.list tr[data-i]{cursor:pointer}
       <div><b id="stYr">–</b><span>年度</span></div>
       <div><b id="stSaved">–</b><span>最終保存</span></div>
     </div>
-    <button class="startBtn" id="goStart">はじめる<small id="resumeText"></small></button>
+    <button class="startBtn" id="goStart">種ごとの分布図<small id="resumeText"></small></button>
+    <button class="startBtn alt" id="stMaps">まとめ図（複数種・ギャップ）<small id="mapsText">複数の種を色分けして1枚にまとめます</small></button>
     <div class="menu">
       <button id="stList">一覧・面積</button>
       <button id="stExport">出力</button>
@@ -258,6 +279,7 @@ table.list tr[data-i]{cursor:pointer}
   <div class="top">
     <button class="iconbtn" id="homeBtn" aria-label="スタート画面へ"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></button>
     <div class="years" id="yearBar" role="group" aria-label="年度"></div>
+    <button class="maptitle" id="mapTitle"></button>
     <div class="spacer"></div>
     <button class="tbtn" id="openPicker">種を選ぶ</button>
     <button class="tbtn" id="openList">一覧</button>
@@ -302,7 +324,7 @@ table.list tr[data-i]{cursor:pointer}
       <div class="swatches" id="swatches"></div>
       <div class="row"><label class="field" style="flex-direction:row;align-items:center;gap:10px">ほかの色<input type="color" id="colorCustom" style="width:56px;height:40px;padding:2px"></label></div>
       <div class="range" style="grid-template-columns:5.5em 1fr 3em"><span>塗りの濃さ</span><input type="range" id="alphaRange" min="0.15" max="1" step="0.05"><output id="alphaOut"></output></div>
-      <p class="note">色は年度ごとに決まります。同じ年度の全種がこの色で描かれ、出力されます。</p>
+      <p class="note" id="colorNote">色は年度ごとに決まります。同じ年度の全種がこの色で描かれ、出力されます。</p>
     </div>
 
     <div class="pop" id="refPop" role="dialog" aria-label="前年度の表示">
@@ -442,6 +464,45 @@ table.list tr[data-i]{cursor:pointer}
   </div>
 </section>
 
+<section class="sheet" id="sheetMaps" aria-label="まとめ図">
+  <header><h2>まとめ図（複数種・ギャップ）</h2><button class="btn" data-close>閉じる</button></header>
+  <div class="body">
+    <p class="note">種ごとの分布図とは別に、複数の種を色分けして1枚に描くための図です。ギャップ（空いている所）も枠で示せます。ここで描いた範囲は、種ごとの分布図のデータには影響しません。</p>
+    <div class="row"><button class="btn primary wide" id="newMapBtn">＋ 新しいまとめ図を作る</button></div>
+    <div id="mapList"></div>
+  </div>
+</section>
+
+<section class="sheet wide" id="sheetItems" aria-label="まとめ図の項目">
+  <header><h2>まとめ図の項目</h2><button class="btn" data-close>閉じる</button></header>
+  <div class="body">
+    <div class="row"><label class="field" style="flex:1"><span>まとめ図の名前（出力の表題になります）</span><input type="text" id="mapTitleInput"></label></div>
+    <div class="row"><button class="btn primary" id="addSpBtn">＋ 種を追加</button><button class="btn" id="addGapBtn">＋ ギャップを追加</button></div>
+    <div id="addSpForm" class="hidden addform">
+      <div class="row"><label class="field" style="flex:1"><span>種</span><select id="addSpSel"></select></label><label class="field" style="flex:1"><span>分布</span><select id="addSpYear"></select></label></div>
+      <div class="row"><input class="search hidden" id="addSpName" placeholder="種名を入力" style="flex:1"><button class="btn primary" id="addSpDo">追加する</button></div>
+      <div class="row"><span class="note">まとめて追加：</span><select class="search" id="addAllYear" style="flex:0 0 auto"></select><button class="btn" id="addAllDo">この年度に分布がある種をすべて追加</button></div>
+      <p class="note">「分布を写す」を選ぶと、種ごとの分布図で描いた範囲を写して追加します。写した後に直しても、元の分布図は変わりません。</p>
+    </div>
+    <div id="itemList"></div>
+  </div>
+</section>
+
+<section class="sheet" id="sheetMapExport" aria-label="まとめ図の出力">
+  <header><h2>まとめ図の出力</h2><button class="btn" data-close>閉じる</button></header>
+  <div class="body">
+    <p class="note">図面の下に凡例欄を付け、項目ごとの色（ギャップは枠）と名前を並べます。表示をオフにした項目は出力されません。</p>
+    <h3>凡例</h3>
+    <div class="row"><span class="note">列の数</span><div class="seg" id="mapCols"><button data-c="2">2列</button><button data-c="3">3列</button><button data-c="4">4列</button></div></div>
+    <label class="switch"><span>凡例に面積を書く</span><input type="checkbox" id="mapArea"></label>
+    <h3>保存</h3>
+    <div class="row"><button class="btn primary wide" id="mapExpPng">画像（PNG）で保存</button></div>
+    <div class="row"><button class="btn wide" id="mapExpDxf">CAD用データ（DXF）を保存</button></div>
+    <div class="row"><button class="btn wide" id="mapExpCsv">面積一覧をCSVで保存</button></div>
+    <p class="note">DXFは項目ごとにレイヤ「まとめ図の名前_項目名」を作ります。塗らない項目（ギャップなど）は輪郭線だけになります。</p>
+  </div>
+</section>
+
 <section class="sheet" id="sheetHelp" aria-label="使い方">
   <header><h2>使い方</h2><button class="btn" data-close>閉じる</button></header>
   <div class="body help">
@@ -468,6 +529,14 @@ table.list tr[data-i]{cursor:pointer}
     <ul>
       <li><span class="kbd">⌘Z</span> 戻す　<span class="kbd">⇧⌘Z</span> やり直す　<span class="kbd">←</span><span class="kbd">→</span> 種の切り替え</li>
       <li><span class="kbd">L</span> 囲って塗る　<span class="kbd">P</span> 多角形　<span class="kbd">C</span> 前年から写す　<span class="kbd">Enter</span> 多角形を閉じる　<span class="kbd">B</span> ブラシ　<span class="kbd">D</span> 点　<span class="kbd">E</span> 消しゴム　<span class="kbd">V</span> 選んで直す　<span class="kbd">[</span><span class="kbd">]</span> 太さ</li>
+    </ul>
+    <h3>まとめ図（複数種・ギャップ）</h3>
+    <ul>
+      <li>スタート画面の「まとめ図」から作ります。種ごとの分布図とは別のデータで、描いても分布図には影響しません。</li>
+      <li>「項目」で種やギャップを追加します。種は分布図から範囲を写して追加することもできます。</li>
+      <li>描く項目は地図の上の「‹ ›」で切り替えます。項目ごとに色・塗りの濃さ・線（実線／破線・太さ）を変えられます。</li>
+      <li>ギャップは初期設定で「塗らない・破線の枠」です。塗りの濃さを上げると薄く塗れます。</li>
+      <li>出力では図面の下に凡例欄を付け、項目の色と名前を並べます。DXFでも書き出せます。</li>
     </ul>
     <h3>確認済み</h3>
     <ul><li>調査で見た種は「確認済み」を押しておくと、一覧で進み具合が分かります（分布が無かった種の確認にも使えます）。</li></ul>
@@ -513,9 +582,11 @@ table.list tr[data-i]{cursor:pointer}
 <script>
 'use strict';
 /* ============ バージョン ============ */
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 const APP_DATE = '2026年11月26日';
 const CHANGES = [
+  'まとめ図：複数の種を色分けして1枚に描き、凡例に色と種名を表示（スタート画面から選択）',
+  'まとめ図のギャップ：範囲を枠（実線・破線）で囲み、塗りの濃さを調整（塗らないも可）',
   '現地の下絵：現地で書き込んだPDFや写真を背景に重ねて表示（位置は自動または2点で合わせる）',
   'CAD用データ（DXF）の書き出し：レイヤ「野草＋種名＋年度」、ハッチと輪郭線、凡例付き',
   '前年から写す：消しゴムで消した後でも、同じ範囲をもう一度写せるように修正',
@@ -563,7 +634,8 @@ function defaultProject(){
 }
 let P = null;
 const keyOf = (y, spIdx) => y + '|' + P.species[spIdx].id;
-const curKey = () => keyOf(P.year, P.sp);
+let MODE='main';
+const curKey = () => MODE==='map' ? mapKey(curMap(), curItem()) : keyOf(P.year, P.sp);
 const sortedYears = () => [...P.years].sort((a,b)=>a-b);
 function prevYearOf(y){ const ys=sortedYears(); const i=ys.indexOf(y); return i>0?ys[i-1]:null; }
 function refYear(){ const r=P.set.refYear; return (r && r!==P.year && P.years.includes(r)) ? r : prevYearOf(P.year); }
@@ -575,7 +647,7 @@ async function seedProject(){
   const p=defaultProject(); p.species=sd.species; p.layers=sd.layers; p.labels=sd.labels||{}; p.seeded=true; p.year=2026; return p;
 }
 function migrate(){
-  P.labels=P.labels||{}; P.yearColors=P.yearColors||{}; P.done=P.done||{}; P.overlays=P.overlays||[];
+  P.labels=P.labels||{}; P.yearColors=P.yearColors||{}; P.done=P.done||{}; P.overlays=P.overlays||[]; P.maps=P.maps||[];
   P.set=Object.assign(defaultProject().set, P.set||{});
   if(P.set.tool==='lassoE') P.set.tool='lasso';
   if((P.migr||0)<3){
@@ -692,8 +764,9 @@ function draw(){
   if(P.set.fade>0){ c.fillStyle=`rgba(255,255,255,${P.set.fade})`; c.fillRect(0,0,W,H); }
   c.imageSmoothingEnabled = true; drawOverlays(c);
   c.imageSmoothingEnabled = true;
-  if((P.set.refMode!=='off' || P.set.tool==='copy') && refL) c.drawImage(refL.c, refL.x, refL.y);
-  if(curL) c.drawImage(curL.c, curL.x, curL.y);
+  if(MODE==='map') drawMapItems(c);
+  else { if((P.set.refMode!=='off' || P.set.tool==='copy') && refL) c.drawImage(refL.c, refL.x, refL.y);
+    if(curL) c.drawImage(curL.c, curL.x, curL.y); }
   // 選択中
   const sh=shapesOf(curKey());
   if(sel>=0 && sh[sel]){ c.save(); if(drag) c.translate(drag.dx, drag.dy);
@@ -726,7 +799,7 @@ function draw(){
     c.beginPath(); c.moveTo(m.x-s,m.y); c.lineTo(m.x+s,m.y); c.moveTo(m.x,m.y-s); c.lineTo(m.x,m.y+s); c.stroke();
     c.fillStyle='#E0262B'; c.font=`bold ${14/Z}px sans-serif`; c.fillText(m.label, m.x+s*0.6, m.y-s*0.6); }
 }
-function curColor(){ return yearColor(P.year); }
+function curColor(){ return MODE==='map' ? ((curItem()||{}).color||'#888') : yearColor(P.year); }
 function drawLive(c){
   const d=drawing, p=d.pts; const col=curColor();
   if(d.tool==='dot'){ c.beginPath(); c.arc(p[0],p[1],dotPx()/2,0,Math.PI*2); c.fillStyle=col; c.fill(); return; }
@@ -744,6 +817,7 @@ function drawLive(c){
   }
 }
 function rebuild(which='both'){
+  if(MODE==='map'){ rebuildMap(which); return; }
   if(which!=='ref'){ curL = buildLayer(shapesOf(curKey()), 'fill', curColor(), P.set.alpha); }
   if(which!=='cur'){ const ry=refYear();
     refL = ry!=null ? (P.set.refMode==='under' ? buildLayer(shapesOf(keyOf(ry,P.sp)),'fill',yearColor(ry),P.set.under,2)
@@ -770,6 +844,7 @@ function hitShapes(sh,x,y){
 }
 function drawPtr(e){
   if(pickCb || importPreview) return false;
+  if(MODE==='map' && !curItem() && P.set.tool!=='pan'){ toast('先に「項目」から種かギャップを追加してください'); return false; }
   if(P.set.tool==='pan') return false;
   if(e.pointerType==='pen'||e.pointerType==='mouse') return true;
   return P.set.fingerDraw && pointers.size===1;
@@ -882,6 +957,7 @@ function deleteVertex(){
 }
 /* 多角形 */
 function addPolyPoint(x,y){
+  if(MODE==='map' && !curItem()) return toast('先に「項目」から種かギャップを追加してください');
   if(!polyDraft) polyDraft={pts:[]};
   const p=polyDraft.pts;
   if(p.length>=6 && Math.hypot(p[0]-x,p[1]-y)*Z<16){ closePoly(); return; }
@@ -984,6 +1060,7 @@ function redo(){ const k=curKey(), h=H_(k); if(!h.r.length) return; h.u.push(sha
 
 /* ============ 画面表示の更新 ============ */
 function updateUI(){
+  if(MODE==='map'){ updateMapUI(); return; }
   const s=P.species[P.sp], col=curColor();
   const by=$('#bYear'); by.textContent=`${P.year}年`; by.style.background=col; by.style.color=inkOn(col);
   $('#bNo').textContent=`No.${pad2(P.sp+1)} / ${P.species.length}種`; $('#bName').textContent=s.name;
@@ -1006,7 +1083,7 @@ function renderYearBar(){
     b.onclick=()=>setYear(y); bar.appendChild(b); }
 }
 const fillYearSel = renderYearBar;
-function setTool(t){ if(t!=='poly') polyDraft=null; vsel=null; P.set.tool=t; if(t!=='select') sel=-1; $$('.tool[data-tool]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tool===t)); renderCtx(); save(); requestDraw(); }
+function setTool(t){ if(MODE==='map' && t==='copy') return; if(t!=='poly') polyDraft=null; vsel=null; P.set.tool=t; if(t!=='select') sel=-1; $$('.tool[data-tool]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.tool===t)); renderCtx(); save(); requestDraw(); }
 function setSp(i){ P.sp=(i+P.species.length)%P.species.length; sel=-1; vsel=null; polyDraft=null; save(); rebuild(); updateUI(); }
 function setYear(y){ P.year=+y; sel=-1; vsel=null; polyDraft=null; save(); rebuild(); updateUI(); }
 
@@ -1053,8 +1130,9 @@ function renderCtx(){
 
 $$('.tool[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
 $('#undoBtn').onclick=undo; $('#redoBtn').onclick=redo;
-$('#spPrev').onclick=()=>setSp(P.sp-1); $('#spNext').onclick=()=>setSp(P.sp+1);
-$('#badgeWho').onclick=()=>openSheet('sheetPicker'); $('#openPicker').onclick=()=>openSheet('sheetPicker');
+$('#spPrev').onclick=()=>MODE==='map'?setItem((curMap().cur||0)-1):setSp(P.sp-1); $('#spNext').onclick=()=>MODE==='map'?setItem((curMap().cur||0)+1):setSp(P.sp+1);
+const openChooser=()=>{ if(MODE==='map'){ renderItems(); openSheet('sheetItems'); } else openSheet('sheetPicker'); };
+$('#badgeWho').onclick=openChooser; $('#openPicker').onclick=openChooser;
 $('#doneBtn').onclick=()=>{ const k=curKey(); if(P.done[k]) delete P.done[k]; else P.done[k]=true; save(); updateUI(); };
 $('#zIn').onclick=()=>zoomBy(1.4); $('#zOut').onclick=()=>zoomBy(1/1.4); $('#fitBtn').onclick=fit;
 
@@ -1065,14 +1143,21 @@ function openPop(id, anchor){ const p=$('#'+id), on=p.classList.contains('on'); 
   p.classList.add('on'); const top=Math.min(r.top-sr.top-10, sr.height-p.offsetHeight-12); p.style.top=Math.max(12,top)+'px'; }
 $('#colorBtn').onclick=e=>{ renderColorPop(); openPop('colorPop', e.currentTarget); };
 function renderColorPop(){
+  if(MODE==='map'){ const it=curItem(); if(!it) return; const c=it.color; $('#colorTitle').textContent=`「${it.name}」の色`;
+    $('#swatches').innerHTML=MAP_COLORS.slice(0,12).map(p=>`<button style="background:${p}" data-c="${p}" aria-label="${p}" aria-pressed="${p.toLowerCase()===c.toLowerCase()}"></button>`).join('');
+    $$('#swatches button').forEach(b=>b.onclick=()=>setYearColor(b.dataset.c));
+    $('#colorCustom').value=c; $('#alphaRange').min=0; $('#alphaRange').value=it.alpha; $('#alphaOut').textContent=it.alpha?Math.round(it.alpha*100)+'%':'塗らない';
+    $('#colorNote').textContent='色・塗りの濃さは項目ごとです。線の種類や太さは「項目」で変えられます。'; return; }
+  $('#alphaRange').min=0.15; $('#colorNote').textContent='色は年度ごとに決まります。同じ年度の全種がこの色で描かれ、出力されます。';
   const c=curColor(); $('#colorTitle').textContent=`${P.year}年の色`;
   $('#swatches').innerHTML=PRESETS.map(p=>`<button style="background:${p}" data-c="${p}" aria-label="${p}" aria-pressed="${p.toLowerCase()===c.toLowerCase()}"></button>`).join('');
   $$('#swatches button').forEach(b=>b.onclick=()=>setYearColor(b.dataset.c));
   $('#colorCustom').value=c; $('#alphaRange').value=P.set.alpha; $('#alphaOut').textContent=Math.round(P.set.alpha*100)+'%';
 }
-function setYearColor(c){ P.yearColors[P.year]=c; save(); rebuild(); updateUI(); renderColorPop(); }
+function setYearColor(c){ if(MODE==='map'){ const it=curItem(); if(!it) return; it.color=c; save(); rebuildMap('cur'); updateUI(); renderColorPop(); return; } P.yearColors[P.year]=c; save(); rebuild(); updateUI(); renderColorPop(); }
 $('#colorCustom').oninput=e=>setYearColor(e.target.value);
-$('#alphaRange').oninput=e=>{ P.set.alpha=+e.target.value; $('#alphaOut').textContent=Math.round(P.set.alpha*100)+'%'; save(); };
+$('#alphaRange').oninput=e=>{ const v=+e.target.value; if(MODE==='map'){ const it=curItem(); if(it){ it.alpha=v; $('#alphaOut').textContent=v?Math.round(v*100)+'%':'塗らない'; save(); } return; }
+  P.set.alpha=v; $('#alphaOut').textContent=Math.round(v*100)+'%'; save(); };
 $('#alphaRange').onchange=()=>rebuild('cur');
 $('#refBtn').onclick=e=>{ renderRefPop(); openPop('refPop', e.currentTarget); };
 function renderRefPop(){
@@ -1103,7 +1188,7 @@ addEventListener('keydown', e=>{
   if((e.key==='Delete'||e.key==='Backspace') && vsel){ deleteVertex(); return; }
   const map={l:'lasso',p:'poly',b:'brush',d:'dot',e:'eraser',v:'select',c:'copy',h:'pan'};
   if(map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
-  else if(e.key==='ArrowRight') setSp(P.sp+1); else if(e.key==='ArrowLeft') setSp(P.sp-1);
+  else if(e.key==='ArrowRight') (MODE==='map'?setItem((curMap().cur||0)+1):setSp(P.sp+1)); else if(e.key==='ArrowLeft') (MODE==='map'?setItem((curMap().cur||0)-1):setSp(P.sp-1));
   else if(e.key===']'||e.key==='['){ P.set.brushM=Math.max(0.1,Math.min(6,+(P.set.brushM+(e.key===']'?0.1:-0.1)).toFixed(1))); renderCtx(); requestDraw(); save(); }
   else if((e.key==='Delete'||e.key==='Backspace') && sel>=0) deleteSelected();
   else if(e.key==='Escape'){ closePops(); closeSheet(); sel=-1; renderCtx(); requestDraw(); }
@@ -1112,10 +1197,10 @@ addEventListener('keydown', e=>{
 /* ============ シート ============ */
 let openSheetId=null;
 function openSheet(id){ closeSheet(); closePops(); openSheetId=id; $('#'+id).classList.add('on'); $('#scrim').classList.add('on');
-  if(id==='sheetList') renderList(); if(id==='sheetSettings') renderSettings(); if(id==='sheetPicker') renderPicker(); if(id==='sheetExport') renderExport(); }
+  if(id==='sheetList') renderList(); if(id==='sheetSettings') renderSettings(); if(id==='sheetPicker') renderPicker(); if(id==='sheetExport') renderExport(); if(id==='sheetItems') renderItems(); if(id==='sheetMaps') renderMaps(); if(id==='sheetMapExport') renderMapExport(); }
 function closeSheet(){ if(openSheetId) $('#'+openSheetId).classList.remove('on'); $('#scrim').classList.remove('on'); openSheetId=null; }
 $('#scrim').onclick=closeSheet; $$('[data-close]').forEach(b=>b.onclick=closeSheet);
-$('#openList').onclick=()=>openSheet('sheetList'); $('#openExport').onclick=()=>openSheet('sheetExport'); $('#openSettings').onclick=()=>openSheet('sheetSettings');
+$('#openList').onclick=()=>openSheet('sheetList'); $('#openExport').onclick=()=>{ if(MODE==='map'){ renderMapExport(); openSheet('sheetMapExport'); } else openSheet('sheetExport'); }; $('#openSettings').onclick=()=>openSheet('sheetSettings');
 
 /* 種の選択 */
 let pickFilter='all';
@@ -1409,8 +1494,8 @@ function traceShapes(shapes){
     const t=outers.find(x=>x.o===par); if(t) t.rings.push(hl.p); });
   return outers.map(x=>({rings:x.rings}));
 }
-function cadItems(spIdx, y){
-  const sh=shapesOf(keyOf(y,spIdx)); if(!sh.length) return [];
+function cadItems(spIdx, y){ return cadItemsFromShapes(shapesOf(keyOf(y,spIdx))); }
+function cadItemsFromShapes(sh){ if(!sh.length) return [];
   const simple=sh.every(s=>!s.e && (s.t!=='s' || s.p.length<=2));
   if(!simple) return traceShapes(sh);
   return sh.map(s=> s.t==='s' ? {dot:[s.p[0],s.p[1],s.w/2]} : {rings:ringsOf(s)});
@@ -1689,7 +1774,8 @@ const ovCache=new Map();   // id -> {src:canvas, disp:canvas, sig}
 let align=null;            // 位置合わせ中 {o, step, u:[], p:[]}
 let ovImport=null;         // 取り込み中のファイル {kind, pdf, file, pages, canvas}
 const ovs = () => (P.overlays=P.overlays||[]);
-const ovApplies = o => o.scope==='all' || o.key===curKey();
+const ovKey = () => MODE==='map' ? 'M|'+(P.curMap||'') : curKey();
+const ovApplies = o => o.scope==='all' || o.key===ovKey();
 const ovSig = () => `${!!P.set.ovWhite}|${!!P.set.ovGray}`;
 function ovProcess(src){
   const c=newCanvas(src.width,src.height), g=c.getContext('2d',{willReadFrequently:true}); g.drawImage(src,0,0);
@@ -1781,8 +1867,8 @@ $('#ovDo').onclick=async()=>{
     const blob=await new Promise(r=>cv.toBlob(r,'image/png')); const id='ov'+Date.now();
     await DB.set('ov:'+id, blob);
     const auto=ovAutoFit(cv), s=auto? W/cv.width : Math.min(W/cv.width, H/cv.height);
-    const o={id, name: ovImport.file.name + (ovImport.pages>1?`（${ovImport.page}ページ目）`:''), scope:P.set.ovScope||'key', key:curKey(),
-      label:`${P.year}年 ${P.species[P.sp].name}`, m:[s,0,0,s, auto?0:(W-cv.width*s)/2, auto?0:(H-cv.height*s)/2], vis:true, aligned:auto};
+    const o={id, name: ovImport.file.name + (ovImport.pages>1?`（${ovImport.page}ページ目）`:''), scope:P.set.ovScope||'key', key:ovKey(),
+      label: MODE==='map' ? `まとめ図「${curMap().title}」` : `${P.year}年 ${P.species[P.sp].name}`, m:[s,0,0,s, auto?0:(W-cv.width*s)/2, auto?0:(H-cv.height*s)/2], vis:true, aligned:auto};
     ovs().push(o); ovCache.set(id,{src:cv}); save();
     if(auto){ closeSheet(); showEditor(); requestDraw(); toast('下絵を取り込み、位置を自動で合わせました'); }
     else startAlign(o);
@@ -1810,7 +1896,199 @@ $('#ovAlpha').oninput=e=>{ P.set.ovAlpha=+e.target.value; $('#ovAlphaOut').textC
 $('#ovWhite').onchange=e=>{ P.set.ovWhite=e.target.checked; save(); requestDraw(); };
 $('#ovGray').onchange=e=>{ P.set.ovGray=e.target.checked; save(); requestDraw(); };
 $('#ovAdd').onclick=()=>{ closePops(); $$('#ovScope button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.s===(P.set.ovScope||'key')));
-  $('#ovFor').textContent=`${P.year}年　No.${pad2(P.sp+1)} ${P.species[P.sp].name}`; openSheet('sheetOv'); };
+  $('#ovFor').textContent= MODE==='map' ? `まとめ図「${curMap().title}」` : `${P.year}年　No.${pad2(P.sp+1)} ${P.species[P.sp].name}`; openSheet('sheetOv'); };
+
+/* ============ まとめ図（複数種を1枚に・ギャップ） ============ */
+const MAP_COLORS=['#E6194B','#3CB44B','#4363D8','#F58231','#911EB4','#00A8C8','#F032E6','#9ACD32','#9A6324','#008080','#FF8C94','#800000','#808000','#000075','#E6B800','#7F7F7F'];
+const maps = () => (P.maps=P.maps||[]);
+function curMap(){ return maps().find(m=>m.id===P.curMap)||null; }
+function curItem(){ const m=curMap(); if(!m||!m.items.length) return null; m.cur=Math.max(0,Math.min(m.cur||0, m.items.length-1)); return m.items[m.cur]; }
+function mapKey(m,it){ return m&&it ? `M|${m.id}|${it.id}` : 'M|none'; }
+function areaKey(k){ const v=ver.get(k)||0, c=areaCache.get(k); if(c && c.v===v && c.mpp===P.mpp) return c.a;
+  const a=computeArea(shapesOf(k)); areaCache.set(k,{v,a,mpp:P.mpp}); return a; }
+const newId = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function hexRgba(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`; }
+let dashPatCanvas=null;
+function dashPattern(ctx){ if(!dashPatCanvas){ const s=12; dashPatCanvas=newCanvas(s*2,s*2); const g=dashPatCanvas.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,s,s); g.fillRect(s,s,s,s); } return ctx.createPattern(dashPatCanvas,'repeat'); }
+/* 項目ごとの見た目（塗りの濃さ・線の種類・太さ）で描く */
+function buildStyled(shapes, it){
+  const bb=bbox(shapes); if(!bb) return null; const {x,y,w,h}=bb, t=Math.max(1,it.lw||2);
+  const mask=newCanvas(w,h), m=mask.getContext('2d'); renderShapes(m, shapes, '#000', -x, -y);
+  const out=newCanvas(w,h), o=out.getContext('2d');
+  if(it.alpha>0){ o.drawImage(mask,0,0); o.globalCompositeOperation='source-in'; o.fillStyle=hexRgba(it.color,it.alpha); o.fillRect(0,0,w,h); o.globalCompositeOperation='source-over'; }
+  const er=newCanvas(w,h), e=er.getContext('2d'); e.drawImage(mask,0,0); e.globalCompositeOperation='destination-in';
+  for(const [dx,dy] of [[t,0],[-t,0],[0,t],[0,-t],[t,t],[t,-t],[-t,t],[-t,-t]]) e.drawImage(mask,dx,dy);
+  const ed=newCanvas(w,h), d=ed.getContext('2d'); d.drawImage(mask,0,0); d.globalCompositeOperation='destination-out'; d.drawImage(er,0,0);
+  if(it.line==='dash'){ d.globalCompositeOperation='destination-in'; d.save(); d.translate(-x,-y); d.fillStyle=dashPattern(d); d.fillRect(x,y,w,h); d.restore(); }
+  d.globalCompositeOperation='source-in'; d.fillStyle=it.color; d.fillRect(0,0,w,h);
+  o.drawImage(ed,0,0); return {c:out,x,y};
+}
+const mapLayers=new Map();
+function rebuildMap(which='both'){
+  const m=curMap(); if(!m) return; const ci=curItem();
+  for(const it of m.items){ if(which==='cur' && it!==ci) continue; mapLayers.set(it.id, buildStyled(shapesOf(mapKey(m,it)), it)); }
+  requestDraw();
+}
+function drawMapItems(c){ const m=curMap(); if(!m) return; const ci=curItem();
+  for(const it of m.items){ if(it.vis===false && it!==ci) continue; const L=mapLayers.get(it.id); if(L) c.drawImage(L.c,L.x,L.y); } }
+function updateMapUI(){
+  const m=curMap(), it=curItem(); if(!m) return;
+  $('#mapTitle').textContent=m.title;
+  $('#openPicker').textContent='項目';
+  const by=$('#bYear');
+  if(it){ by.textContent=it.kind==='gap'?'ギャップ':'種'; by.style.background=it.color; by.style.color=inkOn(it.color);
+    $('#bNo').textContent=`まとめ図　項目 ${m.cur+1} / ${m.items.length}`; $('#bName').textContent=it.name;
+    $('#bArea').textContent=fmtA(areaKey(mapKey(m,it)))+' m²'; $('#bPrev').textContent=it.kind==='gap'?'囲った範囲の面積':'この種の面積';
+    $('#colorSw').style.background=it.color; }
+  else { by.textContent='–'; by.style.background='var(--panel)'; by.style.color='var(--ink)'; $('#bNo').textContent='まとめ図'; $('#bName').textContent='項目を追加してください'; $('#bArea').textContent=''; $('#bPrev').textContent=''; }
+  const h=H_(curKey()); $('#undoBtn').disabled=!h.u.length; $('#redoBtn').disabled=!h.r.length;
+  $('#ovBtn').setAttribute('aria-pressed', ovs().some(o=>o.vis && ovApplies(o)));
+}
+function setItem(i){ const m=curMap(); if(!m||!m.items.length) return; m.cur=(i+m.items.length)%m.items.length; sel=-1; vsel=null; polyDraft=null; save(); updateUI(); renderCtx(); requestDraw(); }
+function enterMap(id){
+  P.curMap=id; MODE='map'; document.body.classList.add('map-mode'); if(P.set.tool==='copy') P.set.tool='lasso';
+  sel=-1; vsel=null; polyDraft=null; mapLayers.clear(); setTool(P.set.tool); rebuildMap(); closeSheet(); showEditor(); updateUI();
+  if(!curMap().items.length) openSheet('sheetItems');
+}
+function enterMain(){ MODE='main'; document.body.classList.remove('map-mode'); $('#openPicker').textContent='種を選ぶ'; sel=-1; vsel=null; polyDraft=null; rebuild(); updateUI(); renderCtx(); closeSheet(); showEditor(); }
+function newMap(){
+  const t=(prompt('まとめ図の名前を入力してください', `${P.year}年 野草分布まとめ図`)||'').trim(); if(!t) return;
+  const m={id:newId('map'), title:t, items:[], cur:0, createdAt:Date.now()}; maps().push(m); save(); enterMap(m.id);
+}
+function nextMapColor(m){ const used=m.items.map(i=>i.color.toLowerCase()); return MAP_COLORS.find(c=>!used.includes(c.toLowerCase())) || MAP_COLORS[m.items.length%MAP_COLORS.length]; }
+function addSpeciesItem(name, srcKey){
+  const m=curMap(); const it={id:newId('it'), kind:'sp', name, color:nextMapColor(m), alpha:0.5, line:'solid', lw:2, vis:true};
+  m.items.push(it); if(srcKey && shapesOf(srcKey).length){ P.layers[mapKey(m,it)]=JSON.parse(JSON.stringify(shapesOf(srcKey))); bump(mapKey(m,it)); }
+  m.cur=m.items.length-1; return it;
+}
+function addGapItem(){
+  const m=curMap(); const n=m.items.filter(i=>i.kind==='gap').length;
+  const it={id:newId('it'), kind:'gap', name:n?`ギャップ${n+1}`:'ギャップ', color:'#404040', alpha:0, line:'dash', lw:4, vis:true};
+  m.items.push(it); m.cur=m.items.length-1; save(); rebuildMap(); updateUI(); renderItems(); toast('ギャップの項目を追加しました。囲って範囲を描いてください');
+}
+/* 項目の一覧シート */
+function renderItems(){
+  const m=curMap(); if(!m) return;
+  $('#mapTitleInput').value=m.title;
+  $('#addSpSel').innerHTML=P.species.map((s,i)=>`<option value="${i}">${pad2(i+1)} ${esc(s.name)}</option>`).join('')+'<option value="-1">（一覧にない種を入力）</option>';
+  $('#addSpYear').innerHTML='<option value="">写さない（空で追加）</option>'+sortedYears().map(y=>`<option value="${y}">${y}年の分布を写す</option>`).join('');
+  $('#addAllYear').innerHTML=sortedYears().map(y=>`<option value="${y}" ${y===P.year?'selected':''}>${y}年</option>`).join('');
+  const el=$('#itemList'); el.innerHTML = m.items.length ? '' : '<p class="note">まだ項目がありません。「種を追加」または「ギャップを追加」から始めてください。</p>';
+  m.items.forEach((it,i)=>{
+    const d=document.createElement('div'); d.className='item'+(i===m.cur?' cur':'');
+    const sw=`background:${hexRgba(it.color,it.alpha)};border:${Math.max(2,it.lw/2+1)}px ${it.line==='dash'?'dashed':'solid'} ${it.color}`;
+    d.innerHTML=`<div class="ihead"><span class="isw" style="${sw}"></span>
+        <button class="iname" data-a="sel"><b>${esc(it.name)}</b><small>${it.kind==='gap'?'ギャップ':'種'}　${fmtA(areaKey(mapKey(m,it)))} m²${i===m.cur?'　（編集中）':''}</small></button>
+        <label class="ivis"><input type="checkbox" ${it.vis!==false?'checked':''}>表示</label></div>
+      <details><summary>名前・色・線の設定</summary>
+        <div class="row"><label class="field" style="flex:1"><span>名前</span><input type="text" data-k="name" value="${esc(it.name)}"></label></div>
+        <div class="swatches" style="grid-template-columns:repeat(8,1fr)">${MAP_COLORS.map(c=>`<button style="background:${c}" data-c="${c}" aria-label="${c}" aria-pressed="${c.toLowerCase()===it.color.toLowerCase()}"></button>`).join('')}</div>
+        <div class="row"><label class="field" style="flex-direction:row;align-items:center;gap:10px">ほかの色<input type="color" data-k="color" value="${it.color}" style="width:56px;height:40px;padding:2px"></label></div>
+        <div class="range" style="grid-template-columns:6.5em 1fr 4em"><span>塗りの濃さ</span><input type="range" data-k="alpha" min="0" max="1" step="0.05" value="${it.alpha}"><output>${it.alpha?Math.round(it.alpha*100)+'%':'塗らない'}</output></div>
+        <div class="row"><span class="lbl note">線</span><div class="seg" data-k="line"><button data-v="solid" aria-pressed="${it.line!=='dash'}">実線</button><button data-v="dash" aria-pressed="${it.line==='dash'}">破線</button></div>
+          <div class="seg" data-k="lw"><button data-v="2" aria-pressed="${it.lw==2}">細</button><button data-v="4" aria-pressed="${it.lw==4}">中</button><button data-v="7" aria-pressed="${it.lw==7}">太</button></div></div>
+        <div class="row"><button class="btn" data-a="up" ${i===0?'disabled':''}>上へ</button><button class="btn" data-a="dn" ${i===m.items.length-1?'disabled':''}>下へ</button><button class="btn warn" data-a="del">この項目を削除</button></div>
+        <p class="note">上にある項目ほど下に重なって描かれます（下の項目が上に描かれます）。</p>
+      </details>`;
+    const upd=(redraw=true)=>{ save(); mapLayers.set(it.id, buildStyled(shapesOf(mapKey(m,it)), it)); requestDraw(); updateUI(); if(redraw) renderItems(); };
+    d.querySelector('[data-a=sel]').onclick=()=>{ setItem(i); closeSheet(); };
+    d.querySelector('.ivis input').onchange=e=>{ it.vis=e.target.checked; upd(false); };
+    d.querySelector('[data-k=name]').onchange=e=>{ it.name=e.target.value.trim()||it.name; upd(); };
+    d.querySelectorAll('.swatches button').forEach(b=>b.onclick=()=>{ it.color=b.dataset.c; upd(); });
+    d.querySelector('[data-k=color]').oninput=e=>{ it.color=e.target.value; upd(false); };
+    const ar=d.querySelector('[data-k=alpha]'); ar.oninput=()=>{ it.alpha=+ar.value; ar.nextElementSibling.textContent=it.alpha?Math.round(it.alpha*100)+'%':'塗らない'; };
+    ar.onchange=()=>upd(false);
+    d.querySelectorAll('[data-k=line] button').forEach(b=>b.onclick=()=>{ it.line=b.dataset.v; upd(); });
+    d.querySelectorAll('[data-k=lw] button').forEach(b=>b.onclick=()=>{ it.lw=+b.dataset.v; upd(); });
+    d.querySelector('[data-a=up]').onclick=()=>{ const c=m.items[m.cur]; [m.items[i-1],m.items[i]]=[m.items[i],m.items[i-1]]; m.cur=m.items.indexOf(c); upd(); };
+    d.querySelector('[data-a=dn]').onclick=()=>{ const c=m.items[m.cur]; [m.items[i+1],m.items[i]]=[m.items[i],m.items[i+1]]; m.cur=m.items.indexOf(c); upd(); };
+    d.querySelector('[data-a=del]').onclick=()=>{ if(!confirm(`項目「${it.name}」と、その範囲を削除します。よろしいですか？`)) return;
+      delete P.layers[mapKey(m,it)]; mapLayers.delete(it.id); m.items.splice(i,1); m.cur=Math.min(m.cur, Math.max(0,m.items.length-1)); save(); requestDraw(); updateUI(); renderItems(); };
+    // 開いている詳細を保つ
+    if(renderItems.open===it.id) d.querySelector('details').open=true;
+    d.querySelector('details').ontoggle=e=>{ if(e.target.open) renderItems.open=it.id; };
+    el.appendChild(d);
+  });
+  $('#addSpName').classList.toggle('hidden', $('#addSpSel').value!=='-1');
+}
+$('#mapTitleInput').onchange=e=>{ const m=curMap(); if(!m) return; m.title=e.target.value.trim()||m.title; save(); updateUI(); };
+$('#addSpBtn').onclick=()=>{ $('#addSpForm').classList.toggle('hidden'); };
+$('#addSpSel').onchange=()=>$('#addSpName').classList.toggle('hidden', $('#addSpSel').value!=='-1');
+$('#addSpDo').onclick=()=>{
+  const m=curMap(), v=+$('#addSpSel').value, y=$('#addSpYear').value; let name, src=null;
+  if(v<0){ name=$('#addSpName').value.trim(); if(!name) return toast('種名を入力してください'); }
+  else { name=P.species[v].name; if(y) src=keyOf(+y,v); }
+  if(m.items.some(i=>i.name===name) && !confirm(`「${name}」はすでにあります。もう1つ追加しますか？`)) return;
+  const it=addSpeciesItem(name, src); save(); rebuildMap(); updateUI(); renderItems();
+  toast(src ? `「${name}」を追加し、${y}年の分布を写しました（${fmtA(areaKey(mapKey(m,it)))} m²）` : `「${name}」を追加しました`);
+};
+$('#addAllDo').onclick=()=>{
+  const m=curMap(), y=+$('#addAllYear').value; let n=0;
+  P.species.forEach((s,i)=>{ const k=keyOf(y,i); if(!shapesOf(k).length) return; if(m.items.some(it=>it.name===s.name)) return; addSpeciesItem(s.name,k); n++; });
+  save(); rebuildMap(); updateUI(); renderItems(); toast(n ? `${y}年に分布がある${n}種を追加しました` : '追加できる種がありません（分布が無いか、すでに追加済みです）', 3500);
+};
+$('#addGapBtn').onclick=addGapItem;
+/* まとめ図の一覧シート */
+function renderMaps(){
+  const el=$('#mapList'); el.innerHTML = maps().length ? '' : '<p class="note">まだまとめ図はありません。</p>';
+  [...maps()].sort((a,b)=>(b.updatedAt||b.createdAt)-(a.updatedAt||a.createdAt)).forEach(m=>{
+    const d=document.createElement('div'); d.className='mapcard';
+    const dt=new Date(m.updatedAt||m.createdAt);
+    d.innerHTML=`<div class="mapinfo"><b>${esc(m.title)}</b><small>${m.items.length}項目　${m.items.slice(0,6).map(i=>`<i style="background:${i.color}"></i>`).join('')}　${dt.getMonth()+1}/${dt.getDate()}更新</small></div>
+      <div class="row" style="margin:0"><button class="btn primary" data-a="open">開く</button><button class="btn" data-a="dup">複製</button><button class="btn warn" data-a="del">削除</button></div>`;
+    d.querySelector('[data-a=open]').onclick=()=>enterMap(m.id);
+    d.querySelector('[data-a=dup]').onclick=()=>{ const c={...JSON.parse(JSON.stringify(m)), id:newId('map'), title:m.title+'（コピー）', createdAt:Date.now(), updatedAt:Date.now()};
+      c.items.forEach((it,j)=>{ const nid=newId('it'); const s=shapesOf(mapKey(m,m.items[j])); it.id=nid; if(s.length) P.layers[mapKey(c,it)]=JSON.parse(JSON.stringify(s)); });
+      maps().push(c); save(); renderMaps(); };
+    d.querySelector('[data-a=del]').onclick=()=>{ if(!confirm(`まとめ図「${m.title}」を削除します。よろしいですか？`)) return;
+      for(const it of m.items) delete P.layers[mapKey(m,it)]; P.maps=maps().filter(x=>x!==m); if(P.curMap===m.id) P.curMap=null; save(); renderMaps(); renderStart(); };
+    el.appendChild(d); });
+}
+$('#newMapBtn').onclick=newMap;
+/* まとめ図の出力 */
+function exportMapCanvas(m){
+  const items=m.items.filter(i=>i.vis!==false), k=W/2924, cols=P.set.mapCols||3, rows=Math.max(1,Math.ceil(items.length/cols));
+  const band=Math.round((130+rows*58)*k), c=newCanvas(W,H+band), g=c.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(baseImg,0,0);
+  if(P.set.fade>0){ g.fillStyle=`rgba(255,255,255,${P.set.fade})`; g.fillRect(0,0,W,H); }
+  for(const it of items){ const L=buildStyled(shapesOf(mapKey(m,it)), it); if(L) g.drawImage(L.c,L.x,L.y); }
+  g.save(); g.scale(k,k); g.textBaseline='top'; const y0=H/k;
+  g.fillStyle='#1E2B23'; g.fillRect(60,y0+10,2924-120,3);
+  g.font=`700 30px ${FONT}`; g.fillText('凡例', 60, y0+36);
+  g.textAlign='right'; g.font=`700 40px ${FONT}`; g.fillText(m.title, 2924-60, y0+30); g.textAlign='left';
+  const colW=(2924-120)/cols;
+  items.forEach((it,i)=>{ const cx=60+(i%cols)*colW, cy=y0+100+Math.floor(i/cols)*58;
+    g.save(); g.beginPath(); g.rect(cx+4,cy+2,84,36); if(it.alpha>0){ g.fillStyle=hexRgba(it.color,it.alpha); g.fill(); }
+    g.strokeStyle=it.color; g.lineWidth=Math.max(2,it.lw*0.8); if(it.line==='dash') g.setLineDash([10,7]); g.stroke(); g.restore();
+    g.fillStyle='#1E2B23'; g.font=`500 28px ${FONT}`; let t=it.name; if(P.set.mapArea) t+=`　${fmtA(areaKey(mapKey(m,it)))}㎡`; g.fillText(t, cx+108, cy+5); });
+  g.restore(); return c;
+}
+function renderMapExport(){ $$('#mapCols button').forEach(b=>b.setAttribute('aria-pressed', +b.dataset.c===(P.set.mapCols||3))); $('#mapArea').checked=!!P.set.mapArea; }
+$$('#mapCols button').forEach(b=>b.onclick=()=>{ P.set.mapCols=+b.dataset.c; save(); renderMapExport(); });
+$('#mapArea').onchange=e=>{ P.set.mapArea=e.target.checked; save(); };
+$('#mapExpPng').onclick=async()=>{ const m=curMap(); if(!m) return; const b=await toBlob(exportMapCanvas(m)); await shareOrSave(b, `${fileSafe(m.title)}.png`); };
+$('#mapExpCsv').onclick=()=>{ const m=curMap(); if(!m) return;
+  const rows=[['No.','項目','種類','面積(m2)']].concat(m.items.map((it,i)=>[i+1,it.name,it.kind==='gap'?'ギャップ':'種',fmtA(areaKey(mapKey(m,it)))]));
+  saveBlob(new Blob(['\uFEFF'+rows.map(r=>r.map(v=>/[",\n]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\r\n')],{type:'text/csv'}), `${fileSafe(m.title)}_面積.csv`); };
+$('#mapExpDxf').onclick=()=>{ const m=curMap(); if(!m) return;
+  const D=new DxfOut(), S=250/25.4*(W/2924); let n=0; const leg=[];
+  for(const it of m.items.filter(i=>i.vis!==false)){
+    const items=cadItemsFromShapes(shapesOf(mapKey(m,it))); if(!items.length) continue;
+    const L=(m.title+'_'+it.name).replace(/[<>\/\\":;?*|=`,]/g,'_'); D.layer(L, it.color); leg.push([it, nearestAci(it.color)]);
+    const op=Math.max(1,Math.round(it.alpha*255));
+    for(const x of items){
+      if(x.dot){ const [cx,cy]=img2cad(x.dot[0],x.dot[1]), r=x.dot[2]/S*225; D.circle(L,cx,cy,r); if(it.alpha>0) D.hatch(L,[{pts:[[cx-r,cy],[cx+r,cy]],bulge:[1,1]}],op); }
+      else { const rings=x.rings.map(r=>{ const a=[]; for(let i=0;i<r.length;i+=2) a.push(img2cad(r[i],r[i+1])); return a; });
+        rings.forEach(r=>D.poly(L,r)); if(it.alpha>0) D.hatch(L, rings.map(r=>({pts:r})), op); }
+      n++; }
+  }
+  if(!n) return toast('書き出す範囲がありません');
+  const LL=(m.title+'_凡例').replace(/[<>\/\\":;?*|=`,]/g,'_'); D.layer(LL,'#000000');
+  D.mtext(LL, LEG_CAD.x, LEG_CAD.y, LEG_CAD.h, `{\\fMS PGothic|b0|i0|c128|p50;凡例\\P`+leg.map(([it,a])=>`\\C${a};${it.kind==='gap'?'□':'■'}\\C7;：${it.name}`).join('\\P')+'}');
+  saveBlob(new Blob([D.build()],{type:'application/dxf'}), `${fileSafe(m.title)}.dxf`); toast(`DXFを保存しました（範囲 ${n}個）`);
+};
+$('#stMaps').onclick=()=>{ renderMaps(); openSheet('sheetMaps'); };
+$('#mapTitle').onclick=()=>{ renderItems(); openSheet('sheetItems'); };
 
 /* ============ スタート画面 ============ */
 function showStart(){ $('#start').classList.remove('hidden'); closeSheet(); closePops(); renderStart(); }
@@ -1820,12 +2098,13 @@ function renderStart(){
   $('#stSp').textContent=P.species.length; const ys=sortedYears(); $('#stYr').textContent=ys.length>1?`${ys[0]}–${String(ys.at(-1)).slice(2)}`:ys[0];
   if(P.updatedAt){ const d=new Date(P.updatedAt); $('#stSaved').textContent=`${d.getMonth()+1}/${d.getDate()}`; } else $('#stSaved').textContent='–';
   $('#resumeText').textContent=`続きから：${P.year}年　No.${pad2(P.sp+1)} ${P.species[P.sp].name}`;
+  const ms=(P.maps||[]); $('#mapsText').textContent = ms.length ? `${ms.length}枚のまとめ図があります` : '複数の種を色分けして1枚にまとめます';
   $('#chTitle').textContent=`Ver ${APP_VERSION} の変更点`; $('#chList').innerHTML=CHANGES.map(c=>`<li>${esc(c)}</li>`).join('');
 }
-$('#goStart').onclick=showEditor;
+$('#goStart').onclick=enterMain;
 $('#homeBtn').onclick=showStart;
-$('#stList').onclick=()=>{ showEditor(); openSheet('sheetList'); };
-$('#stExport').onclick=()=>{ showEditor(); openSheet('sheetExport'); };
+$('#stList').onclick=()=>{ enterMain(); openSheet('sheetList'); };
+$('#stExport').onclick=()=>{ enterMain(); openSheet('sheetExport'); };
 $('#stSettings').onclick=()=>{ showEditor(); openSheet('sheetSettings'); };
 $('#stHelp').onclick=()=>openSheet('sheetHelp');
 
